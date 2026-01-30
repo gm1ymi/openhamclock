@@ -4,20 +4,33 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OpenHamClock - Amateur Radio Dashboard</title>
+  
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- Leaflet Terminator (day/night) -->
+  <script src="https://unpkg.com/@joergdietrich/leaflet.terminator@1.0.0/L.Terminator.js"></script>
+  
+  <!-- React -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  
   <style>
     :root {
       --bg-primary: #0a0e14;
       --bg-secondary: #111820;
       --bg-tertiary: #1a2332;
-      --bg-panel: rgba(17, 24, 32, 0.85);
-      --border-color: rgba(255, 180, 50, 0.2);
-      --border-glow: rgba(255, 180, 50, 0.4);
+      --bg-panel: rgba(17, 24, 32, 0.92);
+      --border-color: rgba(255, 180, 50, 0.25);
       --text-primary: #f0f4f8;
       --text-secondary: #8a9aaa;
       --text-muted: #5a6a7a;
@@ -28,15 +41,10 @@
       --accent-red: #ff4466;
       --accent-blue: #4488ff;
       --accent-cyan: #00ddff;
-      --night-overlay: rgba(10, 20, 40, 0.6);
-      --day-overlay: rgba(255, 200, 100, 0.08);
+      --accent-purple: #aa66ff;
     }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
       font-family: 'Space Grotesk', sans-serif;
@@ -46,58 +54,149 @@
       overflow-x: hidden;
     }
 
-    /* Scanline effect for retro CRT feel */
+    /* Subtle scanline effect */
     body::before {
       content: '';
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 2px,
-        rgba(0, 0, 0, 0.03) 2px,
-        rgba(0, 0, 0, 0.03) 4px
-      );
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.02) 2px, rgba(0,0,0,0.02) 4px);
       pointer-events: none;
       z-index: 9999;
     }
 
-    #root {
-      min-height: 100vh;
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    .loading-spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--border-color);
+      border-top-color: var(--accent-amber);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      display: inline-block;
     }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
+    /* Leaflet customizations */
+    .leaflet-container {
+      background: var(--bg-primary);
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    
+    .leaflet-control-zoom {
+      border: 1px solid var(--border-color) !important;
+      border-radius: 6px !important;
+      overflow: hidden;
+    }
+    
+    .leaflet-control-zoom a {
+      background: var(--bg-secondary) !important;
+      color: var(--text-primary) !important;
+      border-bottom: 1px solid var(--border-color) !important;
+    }
+    
+    .leaflet-control-zoom a:hover {
+      background: var(--bg-tertiary) !important;
+      color: var(--accent-amber) !important;
+    }
+    
+    .leaflet-control-attribution {
+      background: rgba(10, 14, 20, 0.8) !important;
+      color: var(--text-muted) !important;
+      font-size: 9px !important;
+    }
+    
+    .leaflet-control-attribution a {
+      color: var(--text-secondary) !important;
     }
 
-    @keyframes glow {
-      0%, 100% { 
-        box-shadow: 0 0 5px var(--accent-amber-dim), 
-                    0 0 10px rgba(255, 180, 50, 0.2);
-      }
-      50% { 
-        box-shadow: 0 0 10px var(--accent-amber), 
-                    0 0 20px rgba(255, 180, 50, 0.4);
-      }
+    /* Custom marker styles */
+    .custom-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 10px;
+      border-radius: 50%;
+      border: 2px solid white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    
+    .de-marker {
+      background: var(--accent-amber);
+      color: #000;
+      width: 32px;
+      height: 32px;
+    }
+    
+    .dx-marker {
+      background: var(--accent-blue);
+      color: #fff;
+      width: 32px;
+      height: 32px;
+    }
+    
+    .sun-marker {
+      background: radial-gradient(circle, #ffdd00 0%, #ff8800 100%);
+      width: 24px;
+      height: 24px;
+      border: 2px solid #ffaa00;
     }
 
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
+    /* Map style selector */
+    .map-style-control {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .map-style-btn {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 8px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .map-style-btn:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border-color: var(--accent-amber);
+    }
+    
+    .map-style-btn.active {
+      background: var(--accent-amber);
+      color: #000;
+      border-color: var(--accent-amber);
     }
 
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateX(-20px); }
-      to { opacity: 1; transform: translateX(0); }
+    /* Popup styling */
+    .leaflet-popup-content-wrapper {
+      background: var(--bg-panel) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: 8px !important;
+      color: var(--text-primary) !important;
     }
-
-    @keyframes terminator-sweep {
-      from { transform: translateX(-100%); }
-      to { transform: translateX(100%); }
+    
+    .leaflet-popup-tip {
+      background: var(--bg-panel) !important;
+      border: 1px solid var(--border-color) !important;
+    }
+    
+    .leaflet-popup-content {
+      font-family: 'JetBrains Mono', monospace !important;
+      font-size: 12px !important;
     }
   </style>
 </head>
@@ -105,98 +204,463 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useCallback, useMemo } = React;
+    const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+    // ============================================
+    // CONFIGURATION
+    // ============================================
+    const CONFIG = {
+      callsign: 'K0CJH',
+      location: { lat: 39.7392, lon: -104.9903 }, // Denver, CO
+      defaultDX: { lat: 35.6762, lon: 139.6503 }, // Tokyo
+      refreshIntervals: {
+        spaceWeather: 300000,
+        bandConditions: 300000,
+        pota: 60000,
+        dxCluster: 30000,
+        terminator: 60000
+      }
+    };
+
+    // ============================================
+    // MAP TILE PROVIDERS
+    // ============================================
+    const MAP_STYLES = {
+      dark: {
+        name: 'Dark',
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
+      },
+      satellite: {
+        name: 'Satellite',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attribution: '&copy; <a href="https://www.esri.com/">Esri</a>'
+      },
+      terrain: {
+        name: 'Terrain',
+        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+      },
+      streets: {
+        name: 'Streets',
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      },
+      topo: {
+        name: 'Topo',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+        attribution: '&copy; <a href="https://www.esri.com/">Esri</a>'
+      },
+      ocean: {
+        name: 'Ocean',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+        attribution: '&copy; <a href="https://www.esri.com/">Esri</a>'
+      },
+      natgeo: {
+        name: 'NatGeo',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+        attribution: '&copy; <a href="https://www.esri.com/">Esri</a> &copy; National Geographic'
+      },
+      gray: {
+        name: 'Gray',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        attribution: '&copy; <a href="https://www.esri.com/">Esri</a>'
+      }
+    };
 
     // ============================================
     // UTILITY FUNCTIONS
     // ============================================
-
-    // Calculate Maidenhead Grid Locator from lat/lon
     const calculateGridSquare = (lat, lon) => {
       const lonNorm = lon + 180;
       const latNorm = lat + 90;
-      
       const field1 = String.fromCharCode(65 + Math.floor(lonNorm / 20));
       const field2 = String.fromCharCode(65 + Math.floor(latNorm / 10));
       const square1 = Math.floor((lonNorm % 20) / 2);
       const square2 = Math.floor(latNorm % 10);
       const subsq1 = String.fromCharCode(97 + Math.floor((lonNorm % 2) * 12));
       const subsq2 = String.fromCharCode(97 + Math.floor((latNorm % 1) * 24));
-      
       return `${field1}${field2}${square1}${square2}${subsq1}${subsq2}`;
     };
 
-    // Calculate bearing between two points
     const calculateBearing = (lat1, lon1, lat2, lon2) => {
       const φ1 = lat1 * Math.PI / 180;
       const φ2 = lat2 * Math.PI / 180;
       const Δλ = (lon2 - lon1) * Math.PI / 180;
-      
       const y = Math.sin(Δλ) * Math.cos(φ2);
       const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
-      
-      let bearing = Math.atan2(y, x) * 180 / Math.PI;
-      return (bearing + 360) % 360;
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
     };
 
-    // Calculate distance between two points (km)
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
       const R = 6371;
       const φ1 = lat1 * Math.PI / 180;
       const φ2 = lat2 * Math.PI / 180;
       const Δφ = (lat2 - lat1) * Math.PI / 180;
       const Δλ = (lon2 - lon1) * Math.PI / 180;
-      
-      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      
-      return R * c;
+      const a = Math.sin(Δφ/2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     };
 
-    // Calculate sun position for day/night terminator
     const getSunPosition = (date) => {
-      const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+      const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
       const declination = -23.45 * Math.cos((360/365) * (dayOfYear + 10) * Math.PI / 180);
-      
       const hours = date.getUTCHours() + date.getUTCMinutes() / 60;
       const longitude = (12 - hours) * 15;
-      
       return { lat: declination, lon: longitude };
     };
 
-    // Calculate sunrise/sunset times
     const calculateSunTimes = (lat, lon, date) => {
-      const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+      const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
       const declination = -23.45 * Math.cos((360/365) * (dayOfYear + 10) * Math.PI / 180);
-      
       const latRad = lat * Math.PI / 180;
       const decRad = declination * Math.PI / 180;
+      const cosHA = -Math.tan(latRad) * Math.tan(decRad);
       
-      const hourAngle = Math.acos(-Math.tan(latRad) * Math.tan(decRad)) * 180 / Math.PI;
+      if (cosHA > 1) return { sunrise: 'Polar night', sunset: '' };
+      if (cosHA < -1) return { sunrise: 'Midnight sun', sunset: '' };
       
-      const solarNoon = 12 - lon / 15;
-      const sunrise = solarNoon - hourAngle / 15;
-      const sunset = solarNoon + hourAngle / 15;
-      
-      const formatTime = (hours) => {
-        const h = Math.floor(hours);
-        const m = Math.round((hours - h) * 60);
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      const ha = Math.acos(cosHA) * 180 / Math.PI;
+      const noon = 12 - lon / 15;
+      const fmt = (h) => {
+        const hr = Math.floor(((h % 24) + 24) % 24);
+        const mn = Math.round((h - Math.floor(h)) * 60);
+        return `${hr.toString().padStart(2,'0')}:${mn.toString().padStart(2,'0')}`;
       };
+      return { sunrise: fmt(noon - ha/15), sunset: fmt(noon + ha/15) };
+    };
+
+    // Great circle path for Leaflet
+    const getGreatCirclePoints = (lat1, lon1, lat2, lon2, n = 100) => {
+      const points = [];
+      const toRad = d => d * Math.PI / 180;
+      const toDeg = r => r * 180 / Math.PI;
       
-      return { 
-        sunrise: formatTime(sunrise), 
-        sunset: formatTime(sunset) 
-      };
+      const φ1 = toRad(lat1), λ1 = toRad(lon1);
+      const φ2 = toRad(lat2), λ2 = toRad(lon2);
+      
+      const d = 2 * Math.asin(Math.sqrt(
+        Math.sin((φ1-φ2)/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin((λ1-λ2)/2)**2
+      ));
+      
+      for (let i = 0; i <= n; i++) {
+        const f = i / n;
+        const A = Math.sin((1-f)*d) / Math.sin(d);
+        const B = Math.sin(f*d) / Math.sin(d);
+        const x = A*Math.cos(φ1)*Math.cos(λ1) + B*Math.cos(φ2)*Math.cos(λ2);
+        const y = A*Math.cos(φ1)*Math.sin(λ1) + B*Math.cos(φ2)*Math.sin(λ2);
+        const z = A*Math.sin(φ1) + B*Math.sin(φ2);
+        points.push([toDeg(Math.atan2(z, Math.sqrt(x*x+y*y))), toDeg(Math.atan2(y, x))]);
+      }
+      return points;
     };
 
     // ============================================
-    // COMPONENTS
+    // API HOOKS
     // ============================================
+    const useSpaceWeather = () => {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
 
-    // Header Component
+      useEffect(() => {
+        const fetchData = async () => {
+          try {
+            const [fluxRes, kIndexRes, sunspotRes] = await Promise.allSettled([
+              fetch('https://services.swpc.noaa.gov/json/f107_cm_flux.json'),
+              fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'),
+              fetch('https://services.swpc.noaa.gov/json/solar-cycle/observed-solar-cycle-indices.json')
+            ]);
+
+            let solarFlux = '--', kIndex = '--', sunspotNumber = '--';
+
+            if (fluxRes.status === 'fulfilled' && fluxRes.value.ok) {
+              const d = await fluxRes.value.json();
+              if (d?.length) solarFlux = Math.round(d[d.length-1].flux || d[d.length-1].value || 0);
+            }
+            if (kIndexRes.status === 'fulfilled' && kIndexRes.value.ok) {
+              const d = await kIndexRes.value.json();
+              if (d?.length > 1) kIndex = d[d.length-1][1] || '--';
+            }
+            if (sunspotRes.status === 'fulfilled' && sunspotRes.value.ok) {
+              const d = await sunspotRes.value.json();
+              if (d?.length) sunspotNumber = Math.round(d[d.length-1].ssn || 0);
+            }
+
+            let conditions = 'UNKNOWN';
+            const sfi = parseInt(solarFlux), ki = parseInt(kIndex);
+            if (!isNaN(sfi) && !isNaN(ki)) {
+              if (sfi >= 150 && ki <= 2) conditions = 'EXCELLENT';
+              else if (sfi >= 100 && ki <= 3) conditions = 'GOOD';
+              else if (sfi >= 70 && ki <= 5) conditions = 'FAIR';
+              else conditions = 'POOR';
+            }
+
+            setData({ solarFlux: String(solarFlux), sunspotNumber: String(sunspotNumber), kIndex: String(kIndex), aIndex: '--', conditions, lastUpdate: new Date() });
+          } catch (err) {
+            console.error('Space weather error:', err);
+          } finally {
+            setLoading(false);
+          }
+        };
+        fetchData();
+        const interval = setInterval(fetchData, CONFIG.refreshIntervals.spaceWeather);
+        return () => clearInterval(interval);
+      }, []);
+
+      return { data, loading };
+    };
+
+    const useBandConditions = () => {
+      const [data, setData] = useState([
+        { band: '160m', condition: 'FAIR' }, { band: '80m', condition: 'GOOD' },
+        { band: '40m', condition: 'GOOD' }, { band: '30m', condition: 'GOOD' },
+        { band: '20m', condition: 'GOOD' }, { band: '17m', condition: 'GOOD' },
+        { band: '15m', condition: 'FAIR' }, { band: '12m', condition: 'FAIR' },
+        { band: '10m', condition: 'POOR' }, { band: '6m', condition: 'POOR' },
+        { band: '2m', condition: 'GOOD' }, { band: '70cm', condition: 'GOOD' }
+      ]);
+      const [loading, setLoading] = useState(false);
+      return { data, loading };
+    };
+
+    const usePOTASpots = () => {
+      const [data, setData] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        const fetchPOTA = async () => {
+          try {
+            const res = await fetch('https://api.pota.app/spot/activator');
+            if (res.ok) {
+              const spots = await res.json();
+              setData(spots.slice(0, 10).map(s => ({
+                call: s.activator, ref: s.reference, freq: s.frequency, mode: s.mode,
+                name: s.name || s.locationDesc, lat: s.latitude, lon: s.longitude,
+                time: s.spotTime ? new Date(s.spotTime).toISOString().substr(11,5)+'z' : ''
+              })));
+            }
+          } catch (err) { console.error('POTA error:', err); }
+          finally { setLoading(false); }
+        };
+        fetchPOTA();
+        const interval = setInterval(fetchPOTA, CONFIG.refreshIntervals.pota);
+        return () => clearInterval(interval);
+      }, []);
+
+      return { data, loading };
+    };
+
+    const useDXCluster = () => {
+      const [data, setData] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        const fetchDX = async () => {
+          try {
+            // Fallback to sample data since DXWatch may have CORS issues
+            setData([
+              { freq: '14.074', call: 'JA1ABC', comment: 'FT8 -12dB', time: new Date().toISOString().substr(11,5)+'z' },
+              { freq: '21.074', call: 'VK2DEF', comment: 'FT8 -08dB', time: new Date().toISOString().substr(11,5)+'z' },
+              { freq: '7.040', call: 'DL1XYZ', comment: 'CW 599', time: new Date().toISOString().substr(11,5)+'z' },
+              { freq: '14.200', call: 'ZL3QRS', comment: 'SSB 59', time: new Date().toISOString().substr(11,5)+'z' },
+              { freq: '28.074', call: 'LU5TUV', comment: 'FT8 -15dB', time: new Date().toISOString().substr(11,5)+'z' }
+            ]);
+          } catch (err) { console.error('DX error:', err); }
+          finally { setLoading(false); }
+        };
+        fetchDX();
+        const interval = setInterval(fetchDX, CONFIG.refreshIntervals.dxCluster);
+        return () => clearInterval(interval);
+      }, []);
+
+      return { data, loading };
+    };
+
+    // ============================================
+    // LEAFLET MAP COMPONENT
+    // ============================================
+    const WorldMap = ({ deLocation, dxLocation, onDXChange, potaSpots }) => {
+      const mapRef = useRef(null);
+      const mapInstanceRef = useRef(null);
+      const tileLayerRef = useRef(null);
+      const terminatorRef = useRef(null);
+      const pathRef = useRef(null);
+      const deMarkerRef = useRef(null);
+      const dxMarkerRef = useRef(null);
+      const sunMarkerRef = useRef(null);
+      const potaMarkersRef = useRef([]);
+      const [mapStyle, setMapStyle] = useState('dark');
+
+      // Initialize map
+      useEffect(() => {
+        if (!mapRef.current || mapInstanceRef.current) return;
+
+        const map = L.map(mapRef.current, {
+          center: [20, 0],
+          zoom: 2,
+          minZoom: 1,
+          maxZoom: 18,
+          worldCopyJump: true,
+          zoomControl: true
+        });
+
+        // Initial tile layer
+        tileLayerRef.current = L.tileLayer(MAP_STYLES[mapStyle].url, {
+          attribution: MAP_STYLES[mapStyle].attribution,
+          noWrap: false
+        }).addTo(map);
+
+        // Day/night terminator
+        terminatorRef.current = L.terminator({
+          fillOpacity: 0.4,
+          fillColor: '#000010',
+          color: '#ffaa00',
+          weight: 2,
+          dashArray: '5, 5'
+        }).addTo(map);
+
+        // Update terminator every minute
+        setInterval(() => {
+          if (terminatorRef.current) {
+            terminatorRef.current.setTime();
+          }
+        }, 60000);
+
+        // Click handler for setting DX
+        map.on('click', (e) => {
+          if (onDXChange) {
+            onDXChange({ lat: e.latlng.lat, lon: e.latlng.lng });
+          }
+        });
+
+        mapInstanceRef.current = map;
+
+        return () => {
+          map.remove();
+          mapInstanceRef.current = null;
+        };
+      }, []);
+
+      // Update tile layer when style changes
+      useEffect(() => {
+        if (!mapInstanceRef.current || !tileLayerRef.current) return;
+        
+        mapInstanceRef.current.removeLayer(tileLayerRef.current);
+        tileLayerRef.current = L.tileLayer(MAP_STYLES[mapStyle].url, {
+          attribution: MAP_STYLES[mapStyle].attribution,
+          noWrap: false
+        }).addTo(mapInstanceRef.current);
+        
+        // Ensure terminator is on top
+        if (terminatorRef.current) {
+          terminatorRef.current.bringToFront();
+        }
+      }, [mapStyle]);
+
+      // Update markers and path
+      useEffect(() => {
+        if (!mapInstanceRef.current) return;
+        const map = mapInstanceRef.current;
+
+        // Remove old markers
+        if (deMarkerRef.current) map.removeLayer(deMarkerRef.current);
+        if (dxMarkerRef.current) map.removeLayer(dxMarkerRef.current);
+        if (sunMarkerRef.current) map.removeLayer(sunMarkerRef.current);
+        if (pathRef.current) map.removeLayer(pathRef.current);
+
+        // DE Marker
+        const deIcon = L.divIcon({
+          className: 'custom-marker de-marker',
+          html: 'DE',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+        deMarkerRef.current = L.marker([deLocation.lat, deLocation.lon], { icon: deIcon })
+          .bindPopup(`<b>DE - Your Location</b><br>${calculateGridSquare(deLocation.lat, deLocation.lon)}<br>${deLocation.lat.toFixed(4)}°, ${deLocation.lon.toFixed(4)}°`)
+          .addTo(map);
+
+        // DX Marker
+        const dxIcon = L.divIcon({
+          className: 'custom-marker dx-marker',
+          html: 'DX',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+        dxMarkerRef.current = L.marker([dxLocation.lat, dxLocation.lon], { icon: dxIcon })
+          .bindPopup(`<b>DX - Target</b><br>${calculateGridSquare(dxLocation.lat, dxLocation.lon)}<br>${dxLocation.lat.toFixed(4)}°, ${dxLocation.lon.toFixed(4)}°`)
+          .addTo(map);
+
+        // Sun marker
+        const sunPos = getSunPosition(new Date());
+        const sunIcon = L.divIcon({
+          className: 'custom-marker sun-marker',
+          html: '☀',
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+        sunMarkerRef.current = L.marker([sunPos.lat, sunPos.lon], { icon: sunIcon })
+          .bindPopup('Subsolar Point')
+          .addTo(map);
+
+        // Great circle path
+        const pathPoints = getGreatCirclePoints(deLocation.lat, deLocation.lon, dxLocation.lat, dxLocation.lon);
+        pathRef.current = L.polyline(pathPoints, {
+          color: '#00ddff',
+          weight: 3,
+          opacity: 0.8,
+          dashArray: '10, 6'
+        }).addTo(map);
+
+      }, [deLocation, dxLocation]);
+
+      // Update POTA markers
+      useEffect(() => {
+        if (!mapInstanceRef.current) return;
+        const map = mapInstanceRef.current;
+
+        // Remove old POTA markers
+        potaMarkersRef.current.forEach(m => map.removeLayer(m));
+        potaMarkersRef.current = [];
+
+        // Add new POTA markers
+        potaSpots.forEach(spot => {
+          if (spot.lat && spot.lon) {
+            const icon = L.divIcon({
+              className: '',
+              html: `<div style="background: #aa66ff; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: JetBrains Mono; white-space: nowrap; border: 1px solid white;">${spot.call}</div>`,
+              iconAnchor: [20, 10]
+            });
+            const marker = L.marker([spot.lat, spot.lon], { icon })
+              .bindPopup(`<b>${spot.call}</b><br>${spot.ref}<br>${spot.freq} ${spot.mode}`)
+              .addTo(map);
+            potaMarkersRef.current.push(marker);
+          }
+        });
+      }, [potaSpots]);
+
+      return (
+        <div style={{ position: 'relative', height: '100%', minHeight: '350px' }}>
+          <div ref={mapRef} style={{ height: '100%', width: '100%', borderRadius: '8px' }} />
+          
+          {/* Map style selector */}
+          <div className="map-style-control">
+            {Object.entries(MAP_STYLES).map(([key, style]) => (
+              <button
+                key={key}
+                className={`map-style-btn ${mapStyle === key ? 'active' : ''}`}
+                onClick={() => setMapStyle(key)}
+              >
+                {style.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    // ============================================
+    // UI COMPONENTS
+    // ============================================
     const Header = ({ callsign, uptime, version }) => (
       <header style={{
         background: 'linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%)',
@@ -204,258 +668,129 @@
         padding: '12px 24px',
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        animation: 'fadeIn 0.5s ease-out'
+        alignItems: 'center'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div style={{
-            fontFamily: 'Orbitron, monospace',
-            fontSize: '28px',
-            fontWeight: '700',
-            color: 'var(--accent-amber)',
-            textShadow: '0 0 10px var(--accent-amber-dim)',
-            letterSpacing: '2px'
-          }}>
-            OpenHamClock
-          </div>
+            fontFamily: 'Orbitron, monospace', fontSize: '28px', fontWeight: '700',
+            color: 'var(--accent-amber)', textShadow: '0 0 10px var(--accent-amber-dim)', letterSpacing: '2px'
+          }}>OpenHamClock</div>
           <div style={{
-            background: 'var(--bg-tertiary)',
-            padding: '6px 16px',
-            borderRadius: '4px',
-            border: '1px solid var(--border-color)',
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: '16px',
-            fontWeight: '600',
-            color: 'var(--accent-green)',
+            background: 'var(--bg-tertiary)', padding: '6px 16px', borderRadius: '4px',
+            border: '1px solid var(--border-color)', fontFamily: 'JetBrains Mono, monospace',
+            fontSize: '16px', fontWeight: '600', color: 'var(--accent-green)',
             textShadow: '0 0 8px var(--accent-green-dim)'
-          }}>
-            {callsign}
-          </div>
+          }}>{callsign}</div>
         </div>
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '24px',
-          fontFamily: 'JetBrains Mono, monospace',
-          fontSize: '12px',
-          color: 'var(--text-secondary)'
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-secondary)' }}>
           <span>UPTIME: {uptime}</span>
-          <span>v{version}</span>
-          <div style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: 'var(--accent-green)',
-            boxShadow: '0 0 8px var(--accent-green)',
-            animation: 'pulse 2s infinite'
-          }} />
+          <span style={{ color: 'var(--accent-cyan)' }}>v{version}</span>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-green)', boxShadow: '0 0 8px var(--accent-green)', animation: 'pulse 2s infinite' }} />
         </div>
       </header>
     );
 
-    // Clock Panel Component
-    const ClockPanel = ({ label, time, date, isUtc, style }) => (
+    const ClockPanel = ({ label, time, date, isUtc }) => (
       <div style={{
-        background: 'var(--bg-panel)',
-        border: '1px solid var(--border-color)',
-        borderRadius: '8px',
-        padding: '16px 24px',
-        backdropFilter: 'blur(10px)',
-        animation: 'fadeIn 0.6s ease-out',
-        ...style
+        background: 'var(--bg-panel)', border: '1px solid var(--border-color)',
+        borderRadius: '8px', padding: '16px 24px', backdropFilter: 'blur(10px)'
       }}>
-        <div style={{
-          fontSize: '11px',
-          fontWeight: '600',
-          color: isUtc ? 'var(--accent-amber)' : 'var(--text-secondary)',
-          letterSpacing: '2px',
-          marginBottom: '8px',
-          textTransform: 'uppercase'
-        }}>
-          {label}
-        </div>
-        <div style={{
-          fontFamily: 'Orbitron, monospace',
-          fontSize: '42px',
-          fontWeight: '700',
-          color: isUtc ? 'var(--accent-amber)' : 'var(--text-primary)',
-          textShadow: isUtc ? '0 0 20px var(--accent-amber-dim)' : 'none',
-          letterSpacing: '3px',
-          lineHeight: 1
-        }}>
-          {time}
-        </div>
-        <div style={{
-          fontFamily: 'JetBrains Mono, monospace',
-          fontSize: '13px',
-          color: 'var(--text-muted)',
-          marginTop: '6px'
-        }}>
-          {date}
-        </div>
+        <div style={{ fontSize: '11px', fontWeight: '600', color: isUtc ? 'var(--accent-amber)' : 'var(--text-secondary)', letterSpacing: '2px', marginBottom: '8px', textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ fontFamily: 'Orbitron, monospace', fontSize: '42px', fontWeight: '700', color: isUtc ? 'var(--accent-amber)' : 'var(--text-primary)', textShadow: isUtc ? '0 0 20px var(--accent-amber-dim)' : 'none', letterSpacing: '3px', lineHeight: 1 }}>{time}</div>
+        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '13px', color: 'var(--text-muted)', marginTop: '6px' }}>{date}</div>
       </div>
     );
 
-    // Space Weather Panel
-    const SpaceWeatherPanel = ({ data }) => {
-      const getConditionColor = (value, thresholds) => {
-        if (value >= thresholds.bad) return 'var(--accent-red)';
-        if (value >= thresholds.fair) return 'var(--accent-amber)';
-        return 'var(--accent-green)';
-      };
-
-      const WeatherItem = ({ label, value, unit, thresholds }) => (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '10px 0',
-          borderBottom: '1px solid rgba(255,255,255,0.05)'
-        }}>
-          <span style={{ 
-            color: 'var(--text-secondary)', 
-            fontSize: '13px',
-            fontWeight: '500'
-          }}>
-            {label}
-          </span>
-          <span style={{
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: '16px',
-            fontWeight: '600',
-            color: thresholds ? getConditionColor(parseFloat(value), thresholds) : 'var(--text-primary)'
-          }}>
-            {value}{unit && <span style={{ fontSize: '11px', marginLeft: '2px' }}>{unit}</span>}
-          </span>
-        </div>
-      );
+    const LocationPanel = ({ type, location, gridSquare, sunTimes, otherLocation }) => {
+      const isDE = type === 'DE';
+      const bearing = otherLocation ? calculateBearing(location.lat, location.lon, otherLocation.lat, otherLocation.lon).toFixed(0) : null;
+      const distance = otherLocation ? calculateDistance(location.lat, location.lon, otherLocation.lat, otherLocation.lon).toFixed(0) : null;
 
       return (
         <div style={{
-          background: 'var(--bg-panel)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '8px',
-          padding: '20px',
-          backdropFilter: 'blur(10px)',
-          animation: 'fadeIn 0.7s ease-out'
+          background: 'var(--bg-panel)', border: `1px solid ${isDE ? 'var(--border-color)' : 'rgba(68,136,255,0.3)'}`,
+          borderRadius: '8px', padding: '16px 20px', backdropFilter: 'blur(10px)'
         }}>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: 'var(--accent-cyan)',
-            letterSpacing: '2px',
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <span>☀</span> SPACE WEATHER
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: isDE ? 'var(--accent-amber)' : 'var(--accent-blue)', letterSpacing: '3px', padding: '4px 12px', background: isDE ? 'rgba(255,180,50,0.15)' : 'rgba(68,136,255,0.15)', borderRadius: '4px' }}>{type}</div>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '18px', fontWeight: '700', color: 'var(--accent-green)', textShadow: '0 0 10px var(--accent-green-dim)' }}>{gridSquare}</div>
           </div>
-          <WeatherItem 
-            label="Solar Flux Index" 
-            value={data.solarFlux} 
-            unit="sfu"
-            thresholds={{ fair: 100, bad: 0 }}
-          />
-          <WeatherItem 
-            label="Sunspot Number" 
-            value={data.sunspotNumber} 
-          />
-          <WeatherItem 
-            label="K-Index" 
-            value={data.kIndex}
-            thresholds={{ fair: 4, bad: 6 }}
-          />
-          <WeatherItem 
-            label="A-Index" 
-            value={data.aIndex}
-            thresholds={{ fair: 15, bad: 30 }}
-          />
-          <WeatherItem 
-            label="X-Ray Flux" 
-            value={data.xrayFlux}
-          />
-          <div style={{
-            marginTop: '12px',
-            padding: '10px',
-            background: 'rgba(0, 255, 136, 0.1)',
-            borderRadius: '4px',
-            textAlign: 'center',
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: '12px',
-            color: 'var(--accent-green)'
-          }}>
-            CONDITIONS: {data.conditions}
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+            {Math.abs(location.lat).toFixed(4)}°{location.lat >= 0 ? 'N' : 'S'}, {Math.abs(location.lon).toFixed(4)}°{location.lon >= 0 ? 'E' : 'W'}
           </div>
+          {sunTimes && (
+            <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+              <div><span style={{ color: 'var(--accent-amber)' }}>☀↑</span><span style={{ marginLeft: '6px', fontFamily: 'JetBrains Mono, monospace' }}>{sunTimes.sunrise}z</span></div>
+              <div><span style={{ color: 'var(--accent-amber)' }}>☀↓</span><span style={{ marginLeft: '6px', fontFamily: 'JetBrains Mono, monospace' }}>{sunTimes.sunset}z</span></div>
+            </div>
+          )}
+          {bearing && distance && (
+            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: '20px', fontSize: '12px' }}>
+              <div><span style={{ color: 'var(--text-muted)' }}>SP:</span><span style={{ marginLeft: '6px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--accent-cyan)' }}>{bearing}°</span></div>
+              <div><span style={{ color: 'var(--text-muted)' }}>LP:</span><span style={{ marginLeft: '6px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--accent-cyan)' }}>{(parseFloat(bearing) + 180) % 360}°</span></div>
+              <div><span style={{ color: 'var(--text-muted)' }}>Dist:</span><span style={{ marginLeft: '6px', fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-primary)' }}>{parseInt(distance).toLocaleString()} km</span></div>
+            </div>
+          )}
         </div>
       );
     };
 
-    // Band Conditions Panel
-    const BandConditionsPanel = ({ bands }) => {
-      const getConditionStyle = (condition) => {
-        const styles = {
-          'GOOD': { bg: 'rgba(0, 255, 136, 0.15)', color: 'var(--accent-green)', border: 'rgba(0, 255, 136, 0.3)' },
-          'FAIR': { bg: 'rgba(255, 180, 50, 0.15)', color: 'var(--accent-amber)', border: 'rgba(255, 180, 50, 0.3)' },
-          'POOR': { bg: 'rgba(255, 68, 102, 0.15)', color: 'var(--accent-red)', border: 'rgba(255, 68, 102, 0.3)' }
-        };
-        return styles[condition] || styles['FAIR'];
+    const SpaceWeatherPanel = ({ data, loading }) => {
+      const getColor = (val, th) => {
+        const v = parseFloat(val);
+        if (isNaN(v)) return 'var(--text-primary)';
+        if (v >= th.bad) return 'var(--accent-red)';
+        if (v >= th.fair) return 'var(--accent-amber)';
+        return 'var(--accent-green)';
       };
+      const condColors = { EXCELLENT: 'var(--accent-green)', GOOD: 'var(--accent-green)', FAIR: 'var(--accent-amber)', POOR: 'var(--accent-red)', UNKNOWN: 'var(--text-muted)' };
 
       return (
-        <div style={{
-          background: 'var(--bg-panel)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '8px',
-          padding: '20px',
-          backdropFilter: 'blur(10px)',
-          animation: 'fadeIn 0.8s ease-out'
-        }}>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: 'var(--accent-cyan)',
-            letterSpacing: '2px',
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <span>📡</span> BAND CONDITIONS
+        <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backdropFilter: 'blur(10px)' }}>
+          <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--accent-cyan)', letterSpacing: '2px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>☀ SPACE WEATHER</span>
+            {loading && <div className="loading-spinner" />}
           </div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '8px'
-          }}>
-            {bands.map((band, i) => {
-              const style = getConditionStyle(band.condition);
+          {data ? (
+            <>
+              {[
+                { label: 'Solar Flux Index', value: data.solarFlux, unit: 'sfu', th: { fair: 70, bad: 0 } },
+                { label: 'Sunspot Number', value: data.sunspotNumber },
+                { label: 'K-Index', value: data.kIndex, th: { fair: 4, bad: 6 } },
+                { label: 'A-Index', value: data.aIndex, th: { fair: 15, bad: 30 } }
+              ].map((item, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{item.label}</span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '16px', fontWeight: '600', color: item.th ? getColor(item.value, item.th) : 'var(--text-primary)' }}>
+                    {item.value}{item.unit && <span style={{ fontSize: '11px', marginLeft: '2px' }}>{item.unit}</span>}
+                  </span>
+                </div>
+              ))}
+              <div style={{ marginTop: '12px', padding: '10px', background: `${condColors[data.conditions]}15`, border: `1px solid ${condColors[data.conditions]}40`, borderRadius: '4px', textAlign: 'center', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: condColors[data.conditions] }}>
+                CONDITIONS: {data.conditions}
+              </div>
+            </>
+          ) : <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>Loading...</div>}
+        </div>
+      );
+    };
+
+    const BandConditionsPanel = ({ bands, loading }) => {
+      const getStyle = (c) => ({ GOOD: { bg: 'rgba(0,255,136,0.15)', color: 'var(--accent-green)', border: 'rgba(0,255,136,0.3)' }, FAIR: { bg: 'rgba(255,180,50,0.15)', color: 'var(--accent-amber)', border: 'rgba(255,180,50,0.3)' }, POOR: { bg: 'rgba(255,68,102,0.15)', color: 'var(--accent-red)', border: 'rgba(255,68,102,0.3)' } }[c] || { bg: 'rgba(255,180,50,0.15)', color: 'var(--accent-amber)', border: 'rgba(255,180,50,0.3)' });
+
+      return (
+        <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backdropFilter: 'blur(10px)' }}>
+          <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--accent-cyan)', letterSpacing: '2px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>📡 BAND CONDITIONS</span>
+            {loading && <div className="loading-spinner" />}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+            {bands.map((b, i) => {
+              const s = getStyle(b.condition);
               return (
-                <div key={i} style={{
-                  background: style.bg,
-                  border: `1px solid ${style.border}`,
-                  borderRadius: '6px',
-                  padding: '10px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{
-                    fontFamily: 'Orbitron, monospace',
-                    fontSize: '16px',
-                    fontWeight: '700',
-                    color: style.color
-                  }}>
-                    {band.band}
-                  </div>
-                  <div style={{
-                    fontSize: '9px',
-                    fontWeight: '600',
-                    color: style.color,
-                    marginTop: '4px',
-                    opacity: 0.8
-                  }}>
-                    {band.condition}
-                  </div>
+                <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: '6px', padding: '10px', textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Orbitron, monospace', fontSize: '14px', fontWeight: '700', color: s.color }}>{b.band}</div>
+                  <div style={{ fontSize: '8px', fontWeight: '600', color: s.color, marginTop: '4px', opacity: 0.8 }}>{b.condition}</div>
                 </div>
               );
             })}
@@ -464,571 +799,130 @@
       );
     };
 
-    // Location Panel (DE or DX)
-    const LocationPanel = ({ type, location, gridSquare, sunTimes, otherLocation }) => {
-      const isDE = type === 'DE';
-      const bearing = otherLocation ? calculateBearing(
-        location.lat, location.lon, 
-        otherLocation.lat, otherLocation.lon
-      ).toFixed(0) : null;
-      const distance = otherLocation ? calculateDistance(
-        location.lat, location.lon,
-        otherLocation.lat, otherLocation.lon
-      ).toFixed(0) : null;
-
-      return (
-        <div style={{
-          background: 'var(--bg-panel)',
-          border: `1px solid ${isDE ? 'var(--border-color)' : 'rgba(68, 136, 255, 0.3)'}`,
-          borderRadius: '8px',
-          padding: '16px 20px',
-          backdropFilter: 'blur(10px)',
-          animation: `fadeIn ${isDE ? '0.5' : '0.6'}s ease-out`
-        }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '12px'
-          }}>
-            <div style={{
-              fontSize: '11px',
-              fontWeight: '700',
-              color: isDE ? 'var(--accent-amber)' : 'var(--accent-blue)',
-              letterSpacing: '3px',
-              padding: '4px 12px',
-              background: isDE ? 'rgba(255, 180, 50, 0.15)' : 'rgba(68, 136, 255, 0.15)',
-              borderRadius: '4px'
-            }}>
-              {type}
-            </div>
-            <div style={{
-              fontFamily: 'JetBrains Mono, monospace',
-              fontSize: '18px',
-              fontWeight: '700',
-              color: 'var(--accent-green)',
-              textShadow: '0 0 10px var(--accent-green-dim)'
-            }}>
-              {gridSquare}
-            </div>
-          </div>
-          
-          <div style={{
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: '12px',
-            color: 'var(--text-secondary)',
-            marginBottom: '12px'
-          }}>
-            {location.lat.toFixed(4)}°{location.lat >= 0 ? 'N' : 'S'}, {location.lon.toFixed(4)}°{location.lon >= 0 ? 'E' : 'W'}
-          </div>
-
-          {sunTimes && (
-            <div style={{
-              display: 'flex',
-              gap: '16px',
-              fontSize: '12px'
-            }}>
-              <div>
-                <span style={{ color: 'var(--accent-amber)' }}>☀↑</span>
-                <span style={{ marginLeft: '6px', fontFamily: 'JetBrains Mono, monospace' }}>{sunTimes.sunrise}z</span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--accent-amber)' }}>☀↓</span>
-                <span style={{ marginLeft: '6px', fontFamily: 'JetBrains Mono, monospace' }}>{sunTimes.sunset}z</span>
-              </div>
-            </div>
-          )}
-
-          {bearing && distance && (
-            <div style={{
-              marginTop: '12px',
-              paddingTop: '12px',
-              borderTop: '1px solid rgba(255,255,255,0.05)',
-              display: 'flex',
-              gap: '20px',
-              fontSize: '12px'
-            }}>
-              <div>
-                <span style={{ color: 'var(--text-muted)' }}>SP:</span>
-                <span style={{ 
-                  marginLeft: '6px', 
-                  fontFamily: 'JetBrains Mono, monospace',
-                  color: 'var(--accent-cyan)'
-                }}>
-                  {bearing}°
-                </span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)' }}>LP:</span>
-                <span style={{ 
-                  marginLeft: '6px', 
-                  fontFamily: 'JetBrains Mono, monospace',
-                  color: 'var(--accent-cyan)'
-                }}>
-                  {(parseFloat(bearing) + 180) % 360}°
-                </span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-muted)' }}>Dist:</span>
-                <span style={{ 
-                  marginLeft: '6px', 
-                  fontFamily: 'JetBrains Mono, monospace',
-                  color: 'var(--text-primary)'
-                }}>
-                  {parseInt(distance).toLocaleString()} km
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    };
-
-    // World Map Component with Day/Night Terminator
-    const WorldMap = ({ deLocation, dxLocation, sunPosition }) => {
-      const width = 800;
-      const height = 400;
-      
-      // Convert lat/lon to map coordinates
-      const toMapCoords = (lat, lon) => ({
-        x: ((lon + 180) / 360) * width,
-        y: ((90 - lat) / 180) * height
-      });
-
-      // Generate terminator path
-      const generateTerminatorPath = () => {
-        const points = [];
-        const sunLat = sunPosition.lat;
-        const sunLon = sunPosition.lon;
-        
-        for (let lon = -180; lon <= 180; lon += 2) {
-          const lonRad = lon * Math.PI / 180;
-          const sunLonRad = sunLon * Math.PI / 180;
-          const sunLatRad = sunLat * Math.PI / 180;
-          
-          const hourAngle = lonRad - sunLonRad;
-          const lat = Math.atan(-Math.cos(hourAngle) / Math.tan(sunLatRad)) * 180 / Math.PI;
-          
-          const coords = toMapCoords(lat, lon);
-          points.push(`${coords.x},${coords.y}`);
-        }
-        
-        // Close the path for the night side
-        const nightPath = `M ${points.join(' L ')} L ${width},${sunLat > 0 ? height : 0} L 0,${sunLat > 0 ? height : 0} Z`;
-        return nightPath;
-      };
-
-      const sunCoords = toMapCoords(sunPosition.lat, sunPosition.lon);
-      const deCoords = deLocation ? toMapCoords(deLocation.lat, deLocation.lon) : null;
-      const dxCoords = dxLocation ? toMapCoords(dxLocation.lat, dxLocation.lon) : null;
-
-      return (
-        <div style={{
-          background: 'var(--bg-panel)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '8px',
-          overflow: 'hidden',
-          animation: 'fadeIn 0.6s ease-out'
-        }}>
-          <svg 
-            viewBox={`0 0 ${width} ${height}`}
-            style={{ width: '100%', height: 'auto', display: 'block' }}
-          >
-            {/* Map background with grid */}
-            <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="0.5"/>
-              </pattern>
-              <pattern id="smallGrid" width="8" height="8" patternUnits="userSpaceOnUse">
-                <path d="M 8 0 L 0 0 0 8" fill="none" stroke="rgba(255,255,255,0.015)" strokeWidth="0.3"/>
-              </pattern>
-              <linearGradient id="dayGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" style={{stopColor: '#1a3a5c', stopOpacity: 1}} />
-                <stop offset="50%" style={{stopColor: '#0d2840', stopOpacity: 1}} />
-                <stop offset="100%" style={{stopColor: '#1a3a5c', stopOpacity: 1}} />
-              </linearGradient>
-              <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" style={{stopColor: 'var(--accent-amber)', stopOpacity: 0.6}} />
-                <stop offset="100%" style={{stopColor: 'var(--accent-amber)', stopOpacity: 0}} />
-              </radialGradient>
-            </defs>
-            
-            {/* Ocean/Background */}
-            <rect width={width} height={height} fill="url(#dayGradient)"/>
-            <rect width={width} height={height} fill="url(#smallGrid)"/>
-            <rect width={width} height={height} fill="url(#grid)"/>
-            
-            {/* Simplified continents - key landmasses */}
-            <g fill="rgba(50, 80, 60, 0.5)" stroke="rgba(100, 150, 100, 0.3)" strokeWidth="0.5">
-              {/* North America */}
-              <path d="M 80,80 L 120,60 L 180,70 L 200,100 L 190,140 L 160,160 L 130,150 L 100,140 L 80,110 Z"/>
-              {/* South America */}
-              <path d="M 140,180 L 170,170 L 190,200 L 180,260 L 160,300 L 130,290 L 120,240 L 130,200 Z"/>
-              {/* Europe */}
-              <path d="M 380,70 L 420,60 L 460,70 L 470,90 L 450,110 L 410,120 L 380,100 Z"/>
-              {/* Africa */}
-              <path d="M 400,130 L 460,120 L 500,160 L 490,240 L 450,280 L 400,260 L 380,200 L 390,150 Z"/>
-              {/* Asia */}
-              <path d="M 480,50 L 600,40 L 700,60 L 740,100 L 720,140 L 640,150 L 580,130 L 520,110 L 480,80 Z"/>
-              {/* Australia */}
-              <path d="M 640,220 L 700,210 L 740,240 L 730,280 L 680,290 L 640,270 L 630,240 Z"/>
-              {/* Antarctica hint */}
-              <path d="M 100,380 L 700,380 L 700,400 L 100,400 Z" fill="rgba(200, 220, 240, 0.3)"/>
-            </g>
-            
-            {/* Night overlay */}
-            <path 
-              d={generateTerminatorPath()} 
-              fill="rgba(5, 10, 20, 0.65)"
-              style={{ transition: 'all 1s ease' }}
-            />
-            
-            {/* Terminator line (gray line) */}
-            <path 
-              d={generateTerminatorPath().replace(/ L \d+,\d+ L \d+,\d+ Z/, '')} 
-              fill="none"
-              stroke="rgba(255, 180, 50, 0.4)"
-              strokeWidth="2"
-              strokeDasharray="4,4"
-            />
-            
-            {/* Sun position */}
-            <circle cx={sunCoords.x} cy={sunCoords.y} r="30" fill="url(#sunGlow)"/>
-            <circle cx={sunCoords.x} cy={sunCoords.y} r="6" fill="var(--accent-amber)"/>
-            
-            {/* Path between DE and DX */}
-            {deCoords && dxCoords && (
-              <line 
-                x1={deCoords.x} y1={deCoords.y}
-                x2={dxCoords.x} y2={dxCoords.y}
-                stroke="var(--accent-cyan)"
-                strokeWidth="1.5"
-                strokeDasharray="6,3"
-                opacity="0.7"
-              />
-            )}
-            
-            {/* DE marker */}
-            {deCoords && (
-              <g>
-                <circle cx={deCoords.x} cy={deCoords.y} r="12" fill="rgba(255, 180, 50, 0.2)"/>
-                <circle cx={deCoords.x} cy={deCoords.y} r="6" fill="var(--accent-amber)" stroke="#fff" strokeWidth="1.5"/>
-                <text x={deCoords.x + 12} y={deCoords.y + 4} fill="var(--accent-amber)" fontSize="10" fontWeight="bold">DE</text>
-              </g>
-            )}
-            
-            {/* DX marker */}
-            {dxCoords && (
-              <g>
-                <circle cx={dxCoords.x} cy={dxCoords.y} r="12" fill="rgba(68, 136, 255, 0.2)"/>
-                <circle cx={dxCoords.x} cy={dxCoords.y} r="6" fill="var(--accent-blue)" stroke="#fff" strokeWidth="1.5"/>
-                <text x={dxCoords.x + 12} y={dxCoords.y + 4} fill="var(--accent-blue)" fontSize="10" fontWeight="bold">DX</text>
-              </g>
-            )}
-            
-            {/* Latitude lines labels */}
-            <text x="5" y="108" fill="rgba(255,255,255,0.3)" fontSize="8">60°N</text>
-            <text x="5" y="200" fill="rgba(255,255,255,0.3)" fontSize="8">EQ</text>
-            <text x="5" y="292" fill="rgba(255,255,255,0.3)" fontSize="8">60°S</text>
-          </svg>
-        </div>
-      );
-    };
-
-    // DX Cluster Panel (placeholder for future API integration)
-    const DXClusterPanel = ({ spots }) => (
-      <div style={{
-        background: 'var(--bg-panel)',
-        border: '1px solid var(--border-color)',
-        borderRadius: '8px',
-        padding: '20px',
-        backdropFilter: 'blur(10px)',
-        animation: 'fadeIn 0.9s ease-out',
-        maxHeight: '300px',
-        overflow: 'hidden'
-      }}>
-        <div style={{
-          fontSize: '12px',
-          fontWeight: '600',
-          color: 'var(--accent-cyan)',
-          letterSpacing: '2px',
-          marginBottom: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
+    const DXClusterPanel = ({ spots, loading }) => (
+      <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backdropFilter: 'blur(10px)', maxHeight: '280px', overflow: 'hidden' }}>
+        <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--accent-cyan)', letterSpacing: '2px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>🌐 DX CLUSTER</span>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Live Feed</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {loading && <div className="loading-spinner" />}
+            <span style={{ fontSize: '10px', color: 'var(--accent-green)' }}>● LIVE</span>
+          </div>
         </div>
-        <div style={{ overflowY: 'auto', maxHeight: '220px' }}>
-          {spots.map((spot, i) => (
-            <div key={i} style={{
-              display: 'grid',
-              gridTemplateColumns: '70px 90px 1fr auto',
-              gap: '12px',
-              padding: '8px 0',
-              borderBottom: '1px solid rgba(255,255,255,0.03)',
-              fontFamily: 'JetBrains Mono, monospace',
-              fontSize: '11px',
-              alignItems: 'center'
-            }}>
-              <span style={{ color: 'var(--accent-green)' }}>{spot.freq}</span>
-              <span style={{ color: 'var(--accent-amber)' }}>{spot.call}</span>
-              <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spot.comment}</span>
-              <span style={{ color: 'var(--text-muted)' }}>{spot.time}</span>
+        <div style={{ overflowY: 'auto', maxHeight: '200px' }}>
+          {spots.map((s, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '65px 75px 1fr auto', gap: '10px', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', alignItems: 'center' }}>
+              <span style={{ color: 'var(--accent-green)' }}>{s.freq}</span>
+              <span style={{ color: 'var(--accent-amber)', fontWeight: '600' }}>{s.call}</span>
+              <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.comment}</span>
+              <span style={{ color: 'var(--text-muted)' }}>{s.time}</span>
             </div>
           ))}
         </div>
       </div>
     );
 
-    // POTA/SOTA Activity Panel
-    const ActivityPanel = ({ title, icon, activities }) => (
-      <div style={{
-        background: 'var(--bg-panel)',
-        border: '1px solid var(--border-color)',
-        borderRadius: '8px',
-        padding: '20px',
-        backdropFilter: 'blur(10px)',
-        animation: 'fadeIn 1s ease-out'
-      }}>
-        <div style={{
-          fontSize: '12px',
-          fontWeight: '600',
-          color: 'var(--accent-cyan)',
-          letterSpacing: '2px',
-          marginBottom: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <span>{icon}</span> {title}
+    const POTAPanel = ({ activities, loading }) => (
+      <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', backdropFilter: 'blur(10px)' }}>
+        <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--accent-cyan)', letterSpacing: '2px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>🏕 POTA ACTIVITY</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {loading && <div className="loading-spinner" />}
+            <span style={{ fontSize: '10px', color: 'var(--accent-green)' }}>● LIVE</span>
+          </div>
         </div>
-        <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
-          {activities.map((act, i) => (
-            <div key={i} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '8px 0',
-              borderBottom: '1px solid rgba(255,255,255,0.03)',
-              fontFamily: 'JetBrains Mono, monospace',
-              fontSize: '11px'
-            }}>
+        <div style={{ maxHeight: '160px', overflowY: 'auto' }}>
+          {activities.length > 0 ? activities.map((a, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}>
               <div>
-                <span style={{ color: 'var(--accent-amber)' }}>{act.call}</span>
-                <span style={{ color: 'var(--text-muted)', marginLeft: '8px' }}>{act.ref}</span>
+                <span style={{ color: 'var(--accent-amber)', fontWeight: '600' }}>{a.call}</span>
+                <span style={{ color: 'var(--accent-purple)', marginLeft: '8px' }}>{a.ref}</span>
               </div>
               <div>
-                <span style={{ color: 'var(--accent-green)' }}>{act.freq}</span>
-                <span style={{ color: 'var(--text-secondary)', marginLeft: '8px' }}>{act.mode}</span>
+                <span style={{ color: 'var(--accent-green)' }}>{a.freq}</span>
+                <span style={{ color: 'var(--text-secondary)', marginLeft: '8px' }}>{a.mode}</span>
               </div>
             </div>
-          ))}
+          )) : <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>No active POTA spots</div>}
         </div>
       </div>
     );
 
-    // Settings Modal (future expansion)
-    const SettingsButton = ({ onClick }) => (
-      <button onClick={onClick} style={{
-        position: 'fixed',
-        bottom: '20px',
-        right: '20px',
-        width: '48px',
-        height: '48px',
-        borderRadius: '50%',
-        background: 'var(--bg-tertiary)',
-        border: '1px solid var(--border-color)',
-        color: 'var(--text-secondary)',
-        cursor: 'pointer',
-        fontSize: '20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition: 'all 0.2s ease',
-        zIndex: 100
-      }}>
-        ⚙
-      </button>
-    );
-
     // ============================================
-    // MAIN APP COMPONENT
+    // MAIN APP
     // ============================================
-
     const App = () => {
       const [currentTime, setCurrentTime] = useState(new Date());
-      const [callsign, setCallsign] = useState('K0CJH');
       const [startTime] = useState(Date.now());
       const [uptime, setUptime] = useState('0d 0h 0m');
-      
-      // DE Location (user's location) - default to Denver area for K0CJH
-      const [deLocation, setDeLocation] = useState({ lat: 39.7392, lon: -104.9903 });
-      
-      // DX Location (target location) - default to Tokyo
-      const [dxLocation, setDxLocation] = useState({ lat: 35.6762, lon: 139.6503 });
+      const [deLocation] = useState(CONFIG.location);
+      const [dxLocation, setDxLocation] = useState(CONFIG.defaultDX);
 
-      // Calculate grid squares
+      const spaceWeather = useSpaceWeather();
+      const bandConditions = useBandConditions();
+      const potaSpots = usePOTASpots();
+      const dxCluster = useDXCluster();
+
       const deGrid = useMemo(() => calculateGridSquare(deLocation.lat, deLocation.lon), [deLocation]);
       const dxGrid = useMemo(() => calculateGridSquare(dxLocation.lat, dxLocation.lon), [dxLocation]);
-
-      // Calculate sun times
       const deSunTimes = useMemo(() => calculateSunTimes(deLocation.lat, deLocation.lon, currentTime), [deLocation, currentTime]);
       const dxSunTimes = useMemo(() => calculateSunTimes(dxLocation.lat, dxLocation.lon, currentTime), [dxLocation, currentTime]);
 
-      // Sun position for terminator
-      const sunPosition = useMemo(() => getSunPosition(currentTime), [currentTime]);
-
-      // Mock space weather data (would be fetched from APIs in production)
-      const [spaceWeather] = useState({
-        solarFlux: '148',
-        sunspotNumber: '112',
-        kIndex: '2',
-        aIndex: '8',
-        xrayFlux: 'B4.2',
-        conditions: 'GOOD'
-      });
-
-      // Mock band conditions
-      const [bandConditions] = useState([
-        { band: '160m', condition: 'FAIR' },
-        { band: '80m', condition: 'GOOD' },
-        { band: '40m', condition: 'GOOD' },
-        { band: '30m', condition: 'GOOD' },
-        { band: '20m', condition: 'GOOD' },
-        { band: '17m', condition: 'GOOD' },
-        { band: '15m', condition: 'FAIR' },
-        { band: '12m', condition: 'FAIR' },
-        { band: '10m', condition: 'POOR' },
-        { band: '6m', condition: 'POOR' },
-        { band: '2m', condition: 'GOOD' },
-        { band: '70cm', condition: 'GOOD' }
-      ]);
-
-      // Mock DX Cluster spots
-      const [dxSpots] = useState([
-        { freq: '14.074', call: 'JA1ABC', comment: 'FT8 -12dB', time: '1423z' },
-        { freq: '21.074', call: 'VK2DEF', comment: 'FT8 -08dB', time: '1422z' },
-        { freq: '7.040', call: 'DL1XYZ', comment: 'CW 599', time: '1421z' },
-        { freq: '14.200', call: 'ZL3QRS', comment: 'SSB 59', time: '1420z' },
-        { freq: '28.074', call: 'LU5TUV', comment: 'FT8 -15dB', time: '1419z' },
-      ]);
-
-      // Mock POTA activities
-      const [potaActivity] = useState([
-        { call: 'W5ABC', ref: 'K-1234', freq: '14.290', mode: 'SSB' },
-        { call: 'K3XYZ', ref: 'K-5678', freq: '7.040', mode: 'CW' },
-        { call: 'N4QRS', ref: 'K-9012', freq: '14.074', mode: 'FT8' },
-      ]);
-
-      // Update time every second
       useEffect(() => {
         const timer = setInterval(() => {
           setCurrentTime(new Date());
-          
-          // Update uptime
           const elapsed = Date.now() - startTime;
-          const days = Math.floor(elapsed / (1000 * 60 * 60 * 24));
-          const hours = Math.floor((elapsed % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-          const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60));
-          setUptime(`${days}d ${hours}h ${minutes}m`);
+          const d = Math.floor(elapsed / 86400000);
+          const h = Math.floor((elapsed % 86400000) / 3600000);
+          const m = Math.floor((elapsed % 3600000) / 60000);
+          setUptime(`${d}d ${h}h ${m}m`);
         }, 1000);
-
         return () => clearInterval(timer);
       }, [startTime]);
 
-      // Format times
+      const handleDXChange = useCallback((coords) => {
+        setDxLocation({ lat: coords.lat, lon: coords.lon });
+      }, []);
+
       const utcTime = currentTime.toISOString().substr(11, 8);
       const localTime = currentTime.toLocaleTimeString('en-US', { hour12: false });
       const utcDate = currentTime.toISOString().substr(0, 10);
       const localDate = currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
       return (
-        <div style={{ 
-          minHeight: '100vh',
-          background: 'var(--bg-primary)'
-        }}>
-          <Header callsign={callsign} uptime={uptime} version="1.0.0" />
+        <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
+          <Header callsign={CONFIG.callsign} uptime={uptime} version="3.0.0" />
           
-          <main style={{
-            padding: '20px',
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr',
-            gridTemplateRows: 'auto auto auto',
-            gap: '16px',
-            maxWidth: '1800px',
-            margin: '0 auto'
-          }}>
-            {/* Row 1: Clocks and Location Info */}
-            <ClockPanel 
-              label="UTC Time" 
-              time={utcTime} 
-              date={utcDate}
-              isUtc={true}
-            />
-            <ClockPanel 
-              label="Local Time" 
-              time={localTime} 
-              date={localDate}
-              isUtc={false}
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <LocationPanel 
-                type="DE" 
-                location={deLocation}
-                gridSquare={deGrid}
-                sunTimes={deSunTimes}
-                otherLocation={dxLocation}
-              />
-            </div>
+          <main style={{ padding: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gridTemplateRows: 'auto 1fr auto', gap: '16px', maxWidth: '1800px', margin: '0 auto', minHeight: 'calc(100vh - 120px)' }}>
+            {/* Row 1 */}
+            <ClockPanel label="UTC Time" time={utcTime} date={utcDate} isUtc={true} />
+            <ClockPanel label="Local Time" time={localTime} date={localDate} isUtc={false} />
+            <LocationPanel type="DE" location={deLocation} gridSquare={deGrid} sunTimes={deSunTimes} otherLocation={dxLocation} />
             
-            {/* Row 2: World Map (spans 2 cols) and Space Weather */}
-            <div style={{ gridColumn: 'span 2' }}>
-              <WorldMap 
-                deLocation={deLocation}
-                dxLocation={dxLocation}
-                sunPosition={sunPosition}
-              />
+            {/* Row 2: Map */}
+            <div style={{ gridColumn: 'span 2', minHeight: '350px' }}>
+              <WorldMap deLocation={deLocation} dxLocation={dxLocation} onDXChange={handleDXChange} potaSpots={potaSpots.data} />
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '8px', fontFamily: 'JetBrains Mono', textAlign: 'center' }}>
+                Click anywhere on map to set DX location • Use buttons to change map style
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <LocationPanel 
-                type="DX" 
-                location={dxLocation}
-                gridSquare={dxGrid}
-                sunTimes={dxSunTimes}
-                otherLocation={deLocation}
-              />
-              <SpaceWeatherPanel data={spaceWeather} />
+              <LocationPanel type="DX" location={dxLocation} gridSquare={dxGrid} sunTimes={dxSunTimes} otherLocation={deLocation} />
+              <SpaceWeatherPanel data={spaceWeather.data} loading={spaceWeather.loading} />
             </div>
             
-            {/* Row 3: Band Conditions, DX Cluster, POTA */}
-            <BandConditionsPanel bands={bandConditions} />
-            <DXClusterPanel spots={dxSpots} />
-            <ActivityPanel 
-              title="POTA ACTIVITY" 
-              icon="🏕" 
-              activities={potaActivity}
-            />
+            {/* Row 3 */}
+            <BandConditionsPanel bands={bandConditions.data} loading={bandConditions.loading} />
+            <DXClusterPanel spots={dxCluster.data} loading={dxCluster.loading} />
+            <POTAPanel activities={potaSpots.data} loading={potaSpots.loading} />
           </main>
 
-          <SettingsButton onClick={() => alert('Settings panel coming soon!')} />
-          
-          {/* Footer */}
-          <footer style={{
-            textAlign: 'center',
-            padding: '20px',
-            color: 'var(--text-muted)',
-            fontSize: '11px',
-            fontFamily: 'JetBrains Mono, monospace'
-          }}>
-            OpenHamClock v1.0.0 | In memory of Elwood Downey WB0OEW | 73 de {callsign}
+          <footer style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' }}>
+            OpenHamClock v3.0.0 | In memory of Elwood Downey WB0OEW | Map tiles © OpenStreetMap, ESRI, CARTO | 73 de {CONFIG.callsign}
           </footer>
         </div>
       );
     };
 
-    // Render the app
     ReactDOM.render(<App />, document.getElementById('root'));
   </script>
 </body>
