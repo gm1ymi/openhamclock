@@ -1630,57 +1630,73 @@
         // Add new DX paths if enabled
         if (showDXPaths && dxPaths && dxPaths.length > 0) {
           dxPaths.forEach((path, index) => {
-            // Draw great circle line from spotter to DX station
-            const pathPoints = getGreatCirclePoints(
-              path.spotterLat, path.spotterLon,
-              path.dxLat, path.dxLon
-            );
-            
-            // Use different colors based on band (derived from frequency)
-            const freq = parseFloat(path.freq);
-            let color = '#4488ff'; // Default blue
-            if (freq >= 1.8 && freq < 2) color = '#ff6666';      // 160m - red
-            else if (freq >= 3.5 && freq < 4) color = '#ff9966'; // 80m - orange
-            else if (freq >= 7 && freq < 7.5) color = '#ffcc66'; // 40m - yellow
-            else if (freq >= 10 && freq < 10.5) color = '#99ff66'; // 30m - lime
-            else if (freq >= 14 && freq < 14.5) color = '#66ff99'; // 20m - green
-            else if (freq >= 18 && freq < 18.5) color = '#66ffcc'; // 17m - teal
-            else if (freq >= 21 && freq < 21.5) color = '#66ccff'; // 15m - cyan
-            else if (freq >= 24 && freq < 25) color = '#6699ff'; // 12m - blue
-            else if (freq >= 28 && freq < 30) color = '#9966ff'; // 10m - purple
-            else if (freq >= 50 && freq < 54) color = '#ff66ff'; // 6m - magenta
-            
-            // Handle antimeridian crossing
-            const segments = Array.isArray(pathPoints[0]) ? pathPoints : [pathPoints];
-            segments.forEach(segment => {
-              const line = L.polyline(segment, {
-                color: color,
-                weight: 1.5,
-                opacity: 0.5
-              }).addTo(map);
-              dxPathsLinesRef.current.push(line);
-            });
+            try {
+              // Skip if missing or invalid coordinates
+              if (!path.spotterLat || !path.spotterLon || !path.dxLat || !path.dxLon) return;
+              if (isNaN(path.spotterLat) || isNaN(path.spotterLon) || isNaN(path.dxLat) || isNaN(path.dxLon)) return;
+              
+              // Draw great circle line from spotter to DX station
+              const pathPoints = getGreatCirclePoints(
+                path.spotterLat, path.spotterLon,
+                path.dxLat, path.dxLon
+              );
+              
+              // Skip if no valid path points
+              if (!pathPoints || !Array.isArray(pathPoints) || pathPoints.length === 0) return;
+              
+              // Use different colors based on band (derived from frequency)
+              const freq = parseFloat(path.freq);
+              let color = '#4488ff'; // Default blue
+              if (freq >= 1.8 && freq < 2) color = '#ff6666';      // 160m - red
+              else if (freq >= 3.5 && freq < 4) color = '#ff9966'; // 80m - orange
+              else if (freq >= 7 && freq < 7.5) color = '#ffcc66'; // 40m - yellow
+              else if (freq >= 10 && freq < 10.5) color = '#99ff66'; // 30m - lime
+              else if (freq >= 14 && freq < 14.5) color = '#66ff99'; // 20m - green
+              else if (freq >= 18 && freq < 18.5) color = '#66ffcc'; // 17m - teal
+              else if (freq >= 21 && freq < 21.5) color = '#66ccff'; // 15m - cyan
+              else if (freq >= 24 && freq < 25) color = '#6699ff'; // 12m - blue
+              else if (freq >= 28 && freq < 30) color = '#9966ff'; // 10m - purple
+              else if (freq >= 50 && freq < 54) color = '#ff66ff'; // 6m - magenta
+              
+              // Handle antimeridian crossing - pathPoints may be array of segments or single segment
+              // Check if first element's first element is an array (segment structure) vs just [lat, lon]
+              const isSegmented = Array.isArray(pathPoints[0]) && pathPoints[0].length > 0 && Array.isArray(pathPoints[0][0]);
+              const segments = isSegmented ? pathPoints : [pathPoints];
+              
+              segments.forEach(segment => {
+                if (segment && Array.isArray(segment) && segment.length > 1) {
+                  const line = L.polyline(segment, {
+                    color: color,
+                    weight: 1.5,
+                    opacity: 0.5
+                  }).addTo(map);
+                  dxPathsLinesRef.current.push(line);
+                }
+              });
 
-            // Add small markers at DX station end only (to reduce clutter)
-            const dxIcon = L.divIcon({
-              className: '',
-              html: `<div style="width: 6px; height: 6px; background: ${color}; border-radius: 50%; border: 1px solid white; box-shadow: 0 0 3px ${color};"></div>`,
-              iconSize: [6, 6],
-              iconAnchor: [3, 3]
-            });
-            
-            const marker = L.marker([path.dxLat, path.dxLon], { icon: dxIcon })
-              .bindPopup(`
-                <div style="font-family: JetBrains Mono, monospace; font-size: 12px;">
-                  <b style="color: ${color}">${path.dxCall}</b><br>
-                  <span style="color: #888">spotted by</span> <b>${path.spotter}</b><br>
-                  <b>${path.freq} MHz</b><br>
-                  ${path.comment || ''}<br>
-                  <span style="color: #666">${path.time}</span>
-                </div>
-              `)
-              .addTo(map);
-            dxPathsMarkersRef.current.push(marker);
+              // Add small markers at DX station end only (to reduce clutter)
+              const dxIcon = L.divIcon({
+                className: '',
+                html: `<div style="width: 6px; height: 6px; background: ${color}; border-radius: 50%; border: 1px solid white; box-shadow: 0 0 3px ${color};"></div>`,
+                iconSize: [6, 6],
+                iconAnchor: [3, 3]
+              });
+              
+              const marker = L.marker([path.dxLat, path.dxLon], { icon: dxIcon })
+                .bindPopup(`
+                  <div style="font-family: JetBrains Mono, monospace; font-size: 12px;">
+                    <b style="color: ${color}">${path.dxCall}</b><br>
+                    <span style="color: #888">spotted by</span> <b>${path.spotter}</b><br>
+                    <b>${path.freq} MHz</b><br>
+                    ${path.comment || ''}<br>
+                    <span style="color: #666">${path.time}</span>
+                  </div>
+                `)
+                .addTo(map);
+              dxPathsMarkersRef.current.push(marker);
+            } catch (err) {
+              console.error('[DX Paths] Error rendering path:', err, path);
+            }
           });
         }
       }, [dxPaths, showDXPaths]);
