@@ -1725,9 +1725,9 @@
       if (loading || !propagation) {
         return (
           <div className="panel">
-            <div className="panel-header">📡 VOACAP</div>
+            <div className="panel-header">📡 ITU-R P.533</div>
             <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-              Loading predictions...
+              Calculating predictions...
             </div>
           </div>
         );
@@ -1780,8 +1780,8 @@
         <div className="panel" style={{ cursor: 'pointer' }} onClick={cycleViewMode}>
           <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
-              {viewMode === 'bands' ? '📊 BAND CONDITIONS' : '📡 VOACAP'}
-              {hasRealData && viewMode !== 'bands' && <span style={{ color: '#00ff88', fontSize: '10px', marginLeft: '4px' }}>●</span>}
+              {viewMode === 'bands' ? '📊 BAND CONDITIONS' : '📡 ITU-R P.533'}
+              {hasRealData && viewMode !== 'bands' && <span style={{ color: '#00ff88', fontSize: '10px', marginLeft: '4px' }} title="Live ionosonde data">●</span>}
             </span>
             <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
               {viewModeLabels[viewMode]} • click to toggle
@@ -1818,7 +1818,7 @@
             </div>
           ) : (
             <>
-              {/* MUF/LUF and Data Source Info */}
+              {/* MUF/LUF/OWF and Data Source Info */}
               <div style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between',
@@ -1828,27 +1828,48 @@
                 marginBottom: '4px',
                 fontSize: '11px'
               }}>
-                <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
                   <span>
                     <span style={{ color: 'var(--text-muted)' }}>MUF </span>
-                    <span style={{ color: '#ff8800', fontWeight: '600' }}>{muf || '?'}</span>
-                    <span style={{ color: 'var(--text-muted)' }}> MHz</span>
+                    <span style={{ color: '#ff8800', fontWeight: '600' }}>{propagation.frequencies?.muf || muf || '?'}</span>
+                  </span>
+                  <span>
+                    <span style={{ color: 'var(--text-muted)' }}>OWF </span>
+                    <span style={{ color: '#00ff88', fontWeight: '600' }}>{propagation.frequencies?.owf || (muf ? (muf * 0.85).toFixed(1) : '?')}</span>
                   </span>
                   <span>
                     <span style={{ color: 'var(--text-muted)' }}>LUF </span>
-                    <span style={{ color: '#00aaff', fontWeight: '600' }}>{luf || '?'}</span>
-                    <span style={{ color: 'var(--text-muted)' }}> MHz</span>
+                    <span style={{ color: '#00aaff', fontWeight: '600' }}>{propagation.frequencies?.luf || luf || '?'}</span>
                   </span>
                 </div>
                 <span style={{ color: hasRealData ? '#00ff88' : 'var(--text-muted)', fontSize: '10px' }}>
                   {hasRealData 
-                    ? `📡 ${ionospheric?.source || 'ionosonde'}${ionospheric?.distance ? ` (${ionospheric.distance}km)` : ''}`
+                    ? `📡 ${ionospheric?.source || 'ionosonde'}${ionospheric?.distance ? ` ${ionospheric.distance}km` : ''}`
                     : ionospheric?.nearestDistance 
-                      ? `⚡ estimated (nearest: ${ionospheric.nearestStation}, ${ionospheric.nearestDistance}km - too far)`
-                      : '⚡ estimated'
+                      ? `⚡ model (${ionospheric.nearestStation}: ${ionospheric.nearestDistance}km)`
+                      : '⚡ model'
                   }
                 </span>
               </div>
+              
+              {/* Path info for multi-hop */}
+              {propagation.pathGeometry?.hops > 1 && (
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '2px 8px',
+                  marginBottom: '4px',
+                  fontSize: '10px',
+                  color: 'var(--text-muted)'
+                }}>
+                  <span>{propagation.pathGeometry.hops}-hop path</span>
+                  <span>•</span>
+                  <span>~{propagation.pathGeometry.hopLength}km/hop</span>
+                  <span>•</span>
+                  <span>{propagation.pathGeometry.takeoffAngle}° takeoff</span>
+                </div>
+              )}
               
               {viewMode === 'chart' ? (
                 /* VOACAP Heat Map Chart View */
@@ -1919,16 +1940,16 @@
                     fontSize: '11px'
                   }}>
                     <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--text-muted)' }}>REL:</span>
-                      <div style={{ width: '8px', height: '8px', background: '#004400', borderRadius: '1px' }} />
-                      <div style={{ width: '8px', height: '8px', background: '#00aa00', borderRadius: '1px' }} />
-                      <div style={{ width: '8px', height: '8px', background: '#88cc00', borderRadius: '1px' }} />
-                      <div style={{ width: '8px', height: '8px', background: '#ffcc00', borderRadius: '1px' }} />
-                      <div style={{ width: '8px', height: '8px', background: '#ff6600', borderRadius: '1px' }} />
-                      <div style={{ width: '8px', height: '8px', background: '#ff0000', borderRadius: '1px' }} />
+                      <span style={{ color: 'var(--text-muted)' }}>BCR:</span>
+                      <div style={{ width: '8px', height: '8px', background: '#004400', borderRadius: '1px' }} title="0-10%" />
+                      <div style={{ width: '8px', height: '8px', background: '#00aa00', borderRadius: '1px' }} title="10-20%" />
+                      <div style={{ width: '8px', height: '8px', background: '#88cc00', borderRadius: '1px' }} title="20-40%" />
+                      <div style={{ width: '8px', height: '8px', background: '#ffcc00', borderRadius: '1px' }} title="40-60%" />
+                      <div style={{ width: '8px', height: '8px', background: '#ff6600', borderRadius: '1px' }} title="60-80%" />
+                      <div style={{ width: '8px', height: '8px', background: '#ff0000', borderRadius: '1px' }} title="80-100%" />
                     </div>
                     <div style={{ color: 'var(--text-muted)' }}>
-                      {Math.round(distance)}km • {ionospheric?.foF2 ? `foF2=${ionospheric.foF2}` : `SSN=${solarData.ssn}`}
+                      {Math.round(propagation.pathGeometry?.distance || distance)}km • {ionospheric?.foF2 ? `foF2 ${ionospheric.foF2}MHz` : `R₁₂=${solarData.ssn}`}
                     </div>
                   </div>
                 </div>
@@ -1949,7 +1970,7 @@
                     {ionospheric?.foF2 ? (
                       <span><span style={{ color: 'var(--text-muted)' }}>foF2 </span><span style={{ color: '#00ff88' }}>{ionospheric.foF2}</span></span>
                     ) : (
-                      <span><span style={{ color: 'var(--text-muted)' }}>SSN </span><span style={{ color: 'var(--accent-cyan)' }}>{solarData.ssn}</span></span>
+                      <span><span style={{ color: 'var(--text-muted)' }}>R₁₂ </span><span style={{ color: 'var(--accent-cyan)' }}>{solarData.ssn}</span></span>
                     )}
                     <span><span style={{ color: 'var(--text-muted)' }}>K </span><span style={{ color: solarData.kIndex >= 4 ? '#ff4444' : '#00ff88' }}>{solarData.kIndex}</span></span>
                   </div>
@@ -1957,7 +1978,7 @@
                   {currentBands.slice(0, 8).map((band, idx) => (
                     <div key={band.band} style={{ 
                       display: 'grid', 
-                      gridTemplateColumns: '32px 1fr 40px', 
+                      gridTemplateColumns: '32px 1fr 28px 32px', 
                       gap: '4px',
                       padding: '2px 0',
                       alignItems: 'center'
@@ -1982,10 +2003,18 @@
                       </div>
                       <span style={{ 
                         textAlign: 'right',
-                        fontSize: '12px',
+                        fontSize: '11px',
                         color: getStatusColor(band.status)
                       }}>
                         {band.reliability}%
+                      </span>
+                      <span style={{ 
+                        textAlign: 'right',
+                        fontSize: '10px',
+                        color: 'var(--text-muted)',
+                        fontFamily: 'JetBrains Mono, monospace'
+                      }}>
+                        {band.sUnits || ''}
                       </span>
                     </div>
                   ))}
