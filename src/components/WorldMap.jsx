@@ -427,42 +427,58 @@ export const WorldMap = ({
     pskMarkersRef.current.forEach(m => map.removeLayer(m));
     pskMarkersRef.current = [];
 
-    if (showPSKReporter && pskReporterSpots && pskReporterSpots.length > 0 && deLocation) {
+    // Validate deLocation exists and has valid coordinates
+    const hasValidDE = deLocation && 
+      typeof deLocation.lat === 'number' && !isNaN(deLocation.lat) &&
+      typeof deLocation.lon === 'number' && !isNaN(deLocation.lon);
+
+    if (showPSKReporter && pskReporterSpots && pskReporterSpots.length > 0 && hasValidDE) {
       pskReporterSpots.forEach(spot => {
-        if (spot.lat && spot.lon) {
+        // Validate spot coordinates are valid numbers
+        const spotLat = parseFloat(spot.lat);
+        const spotLon = parseFloat(spot.lon);
+        
+        if (!isNaN(spotLat) && !isNaN(spotLon)) {
           const displayCall = spot.receiver || spot.sender;
           const freqMHz = spot.freqMHz || (spot.freq ? (spot.freq / 1000000).toFixed(3) : '?');
           const bandColor = getBandColor(parseFloat(freqMHz));
           
-          // Draw line from DE to spot location
-          const points = getGreatCirclePoints(
-            [deLocation.lat, deLocation.lon],
-            [spot.lat, spot.lon],
-            50
-          );
-          
-          const line = L.polyline(points, {
-            color: bandColor,
-            weight: 1.5,
-            opacity: 0.5,
-            dashArray: '4, 4'
-          }).addTo(map);
-          pskMarkersRef.current.push(line);
-          
-          // Add small dot marker at spot location
-          const circle = L.circleMarker([spot.lat, spot.lon], {
-            radius: 4,
-            fillColor: bandColor,
-            color: '#fff',
-            weight: 1,
-            opacity: 0.9,
-            fillOpacity: 0.8
-          }).bindPopup(`
-            <b>${displayCall}</b><br>
-            ${spot.mode} @ ${freqMHz} MHz<br>
-            ${spot.snr !== null ? `SNR: ${spot.snr > 0 ? '+' : ''}${spot.snr} dB` : ''}
-          `).addTo(map);
-          pskMarkersRef.current.push(circle);
+          try {
+            // Draw line from DE to spot location
+            const points = getGreatCirclePoints(
+              deLocation.lat, deLocation.lon,
+              spotLat, spotLon,
+              50
+            );
+            
+            // Validate points before creating polyline
+            if (points && points.length > 1 && points.every(p => Array.isArray(p) && !isNaN(p[0]) && !isNaN(p[1]))) {
+              const line = L.polyline(points, {
+                color: bandColor,
+                weight: 1.5,
+                opacity: 0.5,
+                dashArray: '4, 4'
+              }).addTo(map);
+              pskMarkersRef.current.push(line);
+            }
+            
+            // Add small dot marker at spot location
+            const circle = L.circleMarker([spotLat, spotLon], {
+              radius: 4,
+              fillColor: bandColor,
+              color: '#fff',
+              weight: 1,
+              opacity: 0.9,
+              fillOpacity: 0.8
+            }).bindPopup(`
+              <b>${displayCall}</b><br>
+              ${spot.mode} @ ${freqMHz} MHz<br>
+              ${spot.snr !== null ? `SNR: ${spot.snr > 0 ? '+' : ''}${spot.snr} dB` : ''}
+            `).addTo(map);
+            pskMarkersRef.current.push(circle);
+          } catch (err) {
+            console.warn('Error rendering PSKReporter spot:', err);
+          }
         }
       });
     }

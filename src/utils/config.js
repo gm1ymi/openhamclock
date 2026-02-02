@@ -187,6 +187,16 @@ export const MAP_STYLES = {
     name: 'Gray',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
     attribution: '&copy; Esri'
+  },
+  political: {
+    name: 'Political',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri'
+  },
+  natgeo: {
+    name: 'Nat Geo',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri, National Geographic'
   }
 };
 
