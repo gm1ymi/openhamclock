@@ -205,37 +205,14 @@ export const getGreatCirclePoints = (lat1, lon1, lat2, lon2, n = 100) => {
     rawPoints.push([toDeg(Math.atan2(z, Math.sqrt(x*x+y*y))), toDeg(Math.atan2(y, x))]);
   }
   
-  // Split path at antimeridian crossings for proper Leaflet rendering
-  const segments = [];
-  let currentSegment = [rawPoints[0]];
-  
+  // Unwrap longitudes to be continuous (no jumps > 180°)
+  // This lets Leaflet draw smoothly across the antimeridian and world copies
   for (let i = 1; i < rawPoints.length; i++) {
-    const prevLat = rawPoints[i-1][0];
-    const prevLon = rawPoints[i-1][1];
-    const currLat = rawPoints[i][0];
-    const currLon = rawPoints[i][1];
-    
-    // Check if we crossed the antimeridian (lon jumps more than 180°)
-    if (Math.abs(currLon - prevLon) > 180) {
-      // Interpolate the crossing point
-      // Normalize longitudes so the crossing is smooth
-      const prevLonAdj = prevLon;
-      const currLonAdj = currLon > prevLon ? currLon - 360 : currLon + 360;
-      const frac = (prevLon > 0 ? 180 - prevLon : -180 - prevLon) / (currLonAdj - prevLonAdj);
-      const crossLat = prevLat + frac * (currLat - prevLat);
-      
-      // End current segment at the map edge
-      currentSegment.push([crossLat, prevLon > 0 ? 180 : -180]);
-      segments.push(currentSegment);
-      
-      // Start new segment from the opposite edge
-      currentSegment = [[crossLat, prevLon > 0 ? -180 : 180]];
-    }
-    currentSegment.push(rawPoints[i]);
+    while (rawPoints[i][1] - rawPoints[i-1][1] > 180) rawPoints[i][1] -= 360;
+    while (rawPoints[i][1] - rawPoints[i-1][1] < -180) rawPoints[i][1] += 360;
   }
-  segments.push(currentSegment);
   
-  return segments;
+  return rawPoints;
 };
 
 export default {

@@ -267,21 +267,16 @@ export const WorldMap = ({
           const isHovered = hoveredSpot && hoveredSpot.call === path.dxCall && 
                            Math.abs(parseFloat(hoveredSpot.freq) - parseFloat(path.freq)) < 0.01;
           
-          // Handle segments
-          const isSegmented = Array.isArray(pathPoints[0]) && pathPoints[0].length > 0 && Array.isArray(pathPoints[0][0]);
-          const segments = isSegmented ? pathPoints : [pathPoints];
-          
-          segments.forEach(segment => {
-            if (segment && Array.isArray(segment) && segment.length > 1) {
-              const line = L.polyline(segment, {
-                color: isHovered ? '#ffffff' : color,
-                weight: isHovered ? 4 : 1.5,
-                opacity: isHovered ? 1 : 0.5
-              }).addTo(map);
-              if (isHovered) line.bringToFront();
-              dxPathsLinesRef.current.push(line);
-            }
-          });
+          // Handle path rendering (single continuous array, unwrapped across antimeridian)
+          if (pathPoints && Array.isArray(pathPoints) && pathPoints.length > 1) {
+            const line = L.polyline(pathPoints, {
+              color: isHovered ? '#ffffff' : color,
+              weight: isHovered ? 4 : 1.5,
+              opacity: isHovered ? 1 : 0.5
+            }).addTo(map);
+            if (isHovered) line.bringToFront();
+            dxPathsLinesRef.current.push(line);
+          }
 
           // Add DX marker
           const dxCircle = L.circleMarker([path.dxLat, path.dxLon], {
@@ -358,34 +353,20 @@ export const WorldMap = ({
         
         // Draw orbit track if available
         if (sat.track && sat.track.length > 1) {
-          // Split track into segments to handle date line crossing
-          let segments = [];
-          let currentSegment = [sat.track[0]];
-          
-          for (let i = 1; i < sat.track.length; i++) {
-            const prevLon = sat.track[i-1][1];
-            const currLon = sat.track[i][1];
-            // If longitude jumps more than 180 degrees, start new segment
-            if (Math.abs(currLon - prevLon) > 180) {
-              segments.push(currentSegment);
-              currentSegment = [];
-            }
-            currentSegment.push(sat.track[i]);
+          // Unwrap longitudes for continuous rendering across antimeridian
+          const unwrapped = sat.track.map(p => [...p]);
+          for (let i = 1; i < unwrapped.length; i++) {
+            while (unwrapped[i][1] - unwrapped[i-1][1] > 180) unwrapped[i][1] -= 360;
+            while (unwrapped[i][1] - unwrapped[i-1][1] < -180) unwrapped[i][1] += 360;
           }
-          segments.push(currentSegment);
           
-          // Draw each segment
-          segments.forEach(segment => {
-            if (segment.length > 1) {
-              const trackLine = L.polyline(segment, {
-                color: sat.visible ? satColor : satColorDark,
-                weight: 2,
-                opacity: sat.visible ? 0.8 : 0.4,
-                dashArray: sat.visible ? null : '5, 5'
-              }).addTo(map);
-              satTracksRef.current.push(trackLine);
-            }
-          });
+          const trackLine = L.polyline(unwrapped, {
+            color: sat.visible ? satColor : satColorDark,
+            weight: 2,
+            opacity: sat.visible ? 0.8 : 0.4,
+            dashArray: sat.visible ? null : '5, 5'
+          }).addTo(map);
+          satTracksRef.current.push(trackLine);
         }
         
         // Draw footprint circle if available and satellite is visible
@@ -537,25 +518,16 @@ export const WorldMap = ({
               50
             );
             
-            // Validate points before creating polyline
-            // getGreatCirclePoints returns array of segments (each segment is array of [lat,lon])
-            if (points && Array.isArray(points) && points.length > 0) {
-              // Check if it's segmented (array of arrays of points) or flat (single segment)
-              const isSegmented = Array.isArray(points[0]) && points[0].length > 0 && Array.isArray(points[0][0]);
-              const segments = isSegmented ? points : [points];
-              
-              segments.forEach(segment => {
-                if (segment && Array.isArray(segment) && segment.length > 1 && 
-                    segment.every(p => Array.isArray(p) && !isNaN(p[0]) && !isNaN(p[1]))) {
-                  const line = L.polyline(segment, {
-                    color: bandColor,
-                    weight: 1.5,
-                    opacity: 0.5,
-                    dashArray: '4, 4'
-                  }).addTo(map);
-                  pskMarkersRef.current.push(line);
-                }
-              });
+            // Validate points before creating polyline (single continuous array, unwrapped across antimeridian)
+            if (points && Array.isArray(points) && points.length > 1 && 
+                points.every(p => Array.isArray(p) && !isNaN(p[0]) && !isNaN(p[1]))) {
+              const line = L.polyline(points, {
+                color: bandColor,
+                weight: 1.5,
+                opacity: 0.5,
+                dashArray: '4, 4'
+              }).addTo(map);
+              pskMarkersRef.current.push(line);
             }
             
             // Add small dot marker at spot location
