@@ -148,7 +148,7 @@ const CONFIG = {
   
   // DX Cluster settings
   spotRetentionMinutes: parseInt(process.env.SPOT_RETENTION_MINUTES) || jsonConfig.dxCluster?.spotRetentionMinutes || 30,
-  dxClusterSource: jsonConfig.dxCluster?.source || 'auto',
+  dxClusterSource: process.env.DX_CLUSTER_SOURCE || jsonConfig.dxCluster?.source || 'auto',
   
   // API keys (don't expose to frontend)
   _openWeatherApiKey: process.env.OPENWEATHER_API_KEY || '',
@@ -983,7 +983,7 @@ let dxSpiderCache = { spots: [], timestamp: 0 };
 const DXSPIDER_CACHE_TTL = 90000; // 90 seconds cache - reduces reconnection frequency
 
 app.get('/api/dxcluster/spots', async (req, res) => {
-  const source = (req.query.source || 'auto').toLowerCase();
+  const source = (req.query.source || CONFIG.dxClusterSource || 'auto').toLowerCase();
   
   // Helper function for HamQTH (HTTP-based, works everywhere)
   async function fetchHamQTH() {

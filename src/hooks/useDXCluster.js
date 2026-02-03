@@ -89,7 +89,7 @@ export const useDXCluster = (source = 'auto', filters = {}) => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('/api/dxcluster/spots');
+        const response = await fetch(`/api/dxcluster/spots?source=${encodeURIComponent(source)}`);
         if (response.ok) {
           const newSpots = await response.json();
           
