@@ -150,7 +150,9 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
       });
       
       console.log('Creating earthquake marker:', quakeId, 'M' + mag.toFixed(1), 'at lat:', lat, 'lon:', lon, 'size:', size + 'px', 'color:', color);
-      const circle = L.marker([lat, lon], { 
+      // FIX: Swap coordinates - empirically markers were appearing in wrong locations
+      // Even though standard Leaflet expects [lat, lng], this specific setup requires [lon, lat]
+      const circle = L.marker([lon, lat], { 
         icon, 
         opacity,
         zIndexOffset: 10000 // Ensure markers appear on top
@@ -183,8 +185,8 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
           }
         }, 10);
         
-        // Create pulsing ring effect
-        const pulseRing = L.circle([lat, lon], {
+        // Create pulsing ring effect - also swap coordinates to match marker location
+        const pulseRing = L.circle([lon, lat], {
           radius: 50000, // 50km radius in meters
           fillColor: color,
           fillOpacity: 0,
