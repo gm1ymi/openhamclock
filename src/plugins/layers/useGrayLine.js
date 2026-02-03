@@ -104,6 +104,49 @@ function calculateSolarAltitude(date, latitude, longitude) {
 function splitAtDateLine(points) {
   if (points.length < 2) return [points];
   
+  // Check if line spans the full world (-180 to 180)
+  const lons = points.map(p => p[1]);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+  const span = maxLon - minLon;
+  
+  console.log('🔍 splitAtDateLine debug:', {
+    totalPoints: points.length,
+    lonRange: `${minLon.toFixed(1)} to ${maxLon.toFixed(1)}`,
+    span: span.toFixed(1)
+  });
+  
+  // If the line spans close to 360°, it wraps around the world
+  // We need to split it at the ±180° boundary
+  if (span > 350) {
+    console.log('🔍 Full-world span detected, splitting at ±180°');
+    
+    // Find where the line crosses from negative to positive (near ±180°)
+    // Split into: [points with lon < 0] and [points with lon >= 0]
+    const westSegment = [];  // Points from -180 to ~0
+    const eastSegment = [];  // Points from ~0 to 180
+    
+    for (let i = 0; i < points.length; i++) {
+      const lon = points[i][1];
+      
+      // Split around longitude 0 or at the extremes
+      // Points near -180 and near +180 should be in different segments
+      if (lon < 0) {
+        westSegment.push(points[i]);
+      } else {
+        eastSegment.push(points[i]);
+      }
+    }
+    
+    const segments = [];
+    if (westSegment.length >= 2) segments.push(westSegment);
+    if (eastSegment.length >= 2) segments.push(eastSegment);
+    
+    console.log('🔍 Split into segments:', segments.map(s => s.length), 'points');
+    return segments;
+  }
+  
+  // Otherwise, check for sudden longitude jumps (traditional date line crossing)
   const segments = [];
   let currentSegment = [points[0]];
   
@@ -116,20 +159,19 @@ function splitAtDateLine(points) {
     
     // If longitude jumps more than 180°, we've crossed the date line
     if (lonDiff > 180) {
-      // Finish current segment
+      console.log(`🔍 Date line jump detected at index ${i}: ${prevLon.toFixed(1)}° → ${currLon.toFixed(1)}°`);
       segments.push(currentSegment);
-      // Start new segment
       currentSegment = [curr];
     } else {
       currentSegment.push(curr);
     }
   }
   
-  // Add final segment
   if (currentSegment.length > 0) {
     segments.push(currentSegment);
   }
   
+  console.log('🔍 splitAtDateLine result:', segments.length, 'segments');
   return segments.filter(seg => seg.length >= 2);
 }
 
