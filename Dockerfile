@@ -43,6 +43,9 @@ RUN npm install --omit=dev
 COPY server.js ./
 COPY config.js ./
 
+# Copy WSJT-X relay agent (served as download to users)
+COPY wsjtx-relay ./wsjtx-relay
+
 # Copy built frontend from builder stage
 COPY --from=builder /app/dist ./dist
 
