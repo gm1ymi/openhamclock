@@ -4,6 +4,8 @@
  * 
  * WSJT-X sends decoded FT8/FT4/JT65/WSPR messages over UDP.
  * The server listens on the configured port and this hook fetches the results.
+ * 
+ * Each browser gets a unique session ID so relay data is per-user.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 
@@ -11,7 +13,26 @@ const POLL_INTERVAL = 2000; // Poll every 2 seconds for near-real-time feel
 const API_URL = '/api/wsjtx';
 const DECODES_URL = '/api/wsjtx/decodes';
 
+// Generate or retrieve persistent session ID
+function getSessionId() {
+  const KEY = 'ohc-wsjtx-session';
+  try {
+    let id = localStorage.getItem(KEY);
+    if (id && id.length >= 16) return id;
+    // Generate a random ID
+    id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2) + Date.now().toString(36) + Math.random().toString(36).substring(2);
+    localStorage.setItem(KEY, id);
+    return id;
+  } catch {
+    // Fallback for privacy browsers that block localStorage
+    return Math.random().toString(36).substring(2) + Date.now().toString(36) + Math.random().toString(36).substring(2);
+  }
+}
+
 export function useWSJTX(enabled = true) {
+  const [sessionId] = useState(getSessionId);
   const [data, setData] = useState({
     clients: {},
     decodes: [],
@@ -30,9 +51,11 @@ export function useWSJTX(enabled = true) {
   const pollDecodes = useCallback(async () => {
     if (!enabled) return;
     try {
-      const url = lastTimestamp.current 
+      const base = lastTimestamp.current 
         ? `${DECODES_URL}?since=${lastTimestamp.current}`
         : DECODES_URL;
+      const sep = base.includes('?') ? '&' : '?';
+      const url = `${base}${sep}session=${sessionId}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
@@ -54,13 +77,13 @@ export function useWSJTX(enabled = true) {
     } catch (e) {
       // Silent fail for lightweight polls
     }
-  }, [enabled]);
+  }, [enabled, sessionId]);
 
   // Full fetch - get everything including status, QSOs, clients
   const fetchFull = useCallback(async () => {
     if (!enabled) return;
     try {
-      const res = await fetch(API_URL);
+      const res = await fetch(`${API_URL}?session=${sessionId}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
@@ -71,7 +94,7 @@ export function useWSJTX(enabled = true) {
       setError(e.message);
       setLoading(false);
     }
-  }, [enabled]);
+  }, [enabled, sessionId]);
 
   // Initial full fetch
   useEffect(() => {
@@ -99,6 +122,7 @@ export function useWSJTX(enabled = true) {
     ...data,
     loading,
     error,
+    sessionId,
     refresh: fetchFull,
   };
 }

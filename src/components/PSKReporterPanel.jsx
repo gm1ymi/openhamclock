@@ -28,6 +28,7 @@ const PSKReporterPanel = ({
   wsjtxPort,
   wsjtxRelayEnabled,
   wsjtxRelayConnected,
+  wsjtxSessionId,
   showWSJTXOnMap,
   onToggleWSJTXMap
 }) => {
@@ -355,9 +356,7 @@ const PSKReporterPanel = ({
                         <span style={{ color: '#4ade80', fontWeight: 600 }}>Relay connected</span>
                       </div>
                       <div style={{ fontSize: '9px', opacity: 0.5 }}>
-                        Waiting for WSJT-X decodes...
-                        <br />
-                        In WSJT-X: Settings → Reporting → UDP → 127.0.0.1:2237
+                        WSJT-X decodes will appear here when the station is active
                       </div>
                     </div>
                   ) : (
@@ -366,19 +365,19 @@ const PSKReporterPanel = ({
                         Download the relay agent for your PC:
                       </div>
                       <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                        <a href="/api/wsjtx/relay/download/linux" 
+                        <a href={`/api/wsjtx/relay/download/linux?session=${wsjtxSessionId || ''}`} 
                           style={{ 
                             padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: '600',
                             background: 'rgba(167,139,250,0.2)', border: '1px solid #a78bfa55',
                             color: '#a78bfa', textDecoration: 'none', cursor: 'pointer',
                           }}>🐧 Linux</a>
-                        <a href="/api/wsjtx/relay/download/mac"
+                        <a href={`/api/wsjtx/relay/download/mac?session=${wsjtxSessionId || ''}`}
                           style={{ 
                             padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: '600',
                             background: 'rgba(167,139,250,0.2)', border: '1px solid #a78bfa55',
                             color: '#a78bfa', textDecoration: 'none', cursor: 'pointer',
                           }}>🍎 Mac</a>
-                        <a href="/api/wsjtx/relay/download/windows"
+                        <a href={`/api/wsjtx/relay/download/windows?session=${wsjtxSessionId || ''}`}
                           style={{ 
                             padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: '600',
                             background: 'rgba(167,139,250,0.2)', border: '1px solid #a78bfa55',

@@ -718,6 +718,7 @@ const App = () => {
               wsjtxPort={wsjtx.port}
               wsjtxRelayEnabled={wsjtx.relayEnabled}
               wsjtxRelayConnected={wsjtx.relayConnected}
+              wsjtxSessionId={wsjtx.sessionId}
               showWSJTXOnMap={mapLayers.showWSJTX}
               onToggleWSJTXMap={toggleWSJTX}
             />

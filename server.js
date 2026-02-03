@@ -3661,14 +3661,50 @@ const WSJTX_MSG = {
   CONFIGURE: 15,
 };
 
-// In-memory store
+// In-memory store (for local UDP — no session)
 const wsjtxState = {
   clients: {},    // clientId -> { status, lastSeen }
   decodes: [],    // decoded messages (ring buffer)
   qsos: [],       // logged QSOs
   wspr: [],       // WSPR decodes
-  relay: null,    // { lastSeen, version, port } — set by relay heartbeat
+  relay: null,    // not used for local UDP
 };
+
+// Per-session relay storage — each browser gets its own isolated data
+const wsjtxRelaySessions = {};  // sessionId -> { clients, decodes, qsos, wspr, relay, lastAccess }
+const WSJTX_SESSION_MAX_AGE = 60 * 60 * 1000; // 1 hour inactive expiry
+const WSJTX_MAX_SESSIONS = 50; // prevent memory abuse
+
+function getRelaySession(sessionId) {
+  if (!sessionId) return null;
+  if (!wsjtxRelaySessions[sessionId]) {
+    // Check session limit
+    if (Object.keys(wsjtxRelaySessions).length >= WSJTX_MAX_SESSIONS) {
+      // Evict oldest session
+      let oldestId = null, oldestTime = Infinity;
+      for (const [id, s] of Object.entries(wsjtxRelaySessions)) {
+        if (s.lastAccess < oldestTime) { oldestTime = s.lastAccess; oldestId = id; }
+      }
+      if (oldestId) delete wsjtxRelaySessions[oldestId];
+    }
+    wsjtxRelaySessions[sessionId] = {
+      clients: {}, decodes: [], qsos: [], wspr: [],
+      relay: null, lastAccess: Date.now()
+    };
+  }
+  wsjtxRelaySessions[sessionId].lastAccess = Date.now();
+  return wsjtxRelaySessions[sessionId];
+}
+
+// Cleanup expired sessions every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of Object.entries(wsjtxRelaySessions)) {
+    if (now - session.lastAccess > WSJTX_SESSION_MAX_AGE) {
+      delete wsjtxRelaySessions[id];
+    }
+  }
+}, 5 * 60 * 1000);
 
 /**
  * QDataStream binary reader for WSJT-X protocol
@@ -3938,14 +3974,17 @@ function freqToBand(freqHz) {
 
 /**
  * Handle incoming WSJT-X messages
+ * @param {Object} msg - parsed WSJT-X message
+ * @param {Object} state - state object to update (wsjtxState for local, session for relay)
  */
-function handleWSJTXMessage(msg) {
+function handleWSJTXMessage(msg, state) {
   if (!msg) return;
+  if (!state) state = wsjtxState;
   
   switch (msg.type) {
     case WSJTX_MSG.HEARTBEAT: {
-      wsjtxState.clients[msg.id] = {
-        ...(wsjtxState.clients[msg.id] || {}),
+      state.clients[msg.id] = {
+        ...(state.clients[msg.id] || {}),
         version: msg.version,
         lastSeen: msg.timestamp
       };
@@ -3953,8 +3992,8 @@ function handleWSJTXMessage(msg) {
     }
     
     case WSJTX_MSG.STATUS: {
-      wsjtxState.clients[msg.id] = {
-        ...(wsjtxState.clients[msg.id] || {}),
+      state.clients[msg.id] = {
+        ...(state.clients[msg.id] || {}),
         lastSeen: msg.timestamp,
         dialFrequency: msg.dialFrequency,
         mode: msg.mode,
@@ -3973,7 +4012,7 @@ function handleWSJTXMessage(msg) {
     }
     
     case WSJTX_MSG.DECODE: {
-      const clientStatus = wsjtxState.clients[msg.id] || {};
+      const clientStatus = state.clients[msg.id] || {};
       const parsed = parseDecodeMessage(msg.message);
       
       const decode = {
@@ -4006,13 +4045,13 @@ function handleWSJTXMessage(msg) {
       
       // Only keep new decodes (not replays)
       if (msg.isNew) {
-        wsjtxState.decodes.push(decode);
+        state.decodes.push(decode);
         
         // Trim old decodes
         const cutoff = Date.now() - WSJTX_MAX_AGE;
-        while (wsjtxState.decodes.length > WSJTX_MAX_DECODES || 
-               (wsjtxState.decodes.length > 0 && wsjtxState.decodes[0].timestamp < cutoff)) {
-          wsjtxState.decodes.shift();
+        while (state.decodes.length > WSJTX_MAX_DECODES || 
+               (state.decodes.length > 0 && state.decodes[0].timestamp < cutoff)) {
+          state.decodes.shift();
         }
       }
       break;
@@ -4020,12 +4059,12 @@ function handleWSJTXMessage(msg) {
     
     case WSJTX_MSG.CLEAR: {
       // WSJT-X cleared its band activity - optionally clear our decodes for this client
-      wsjtxState.decodes = wsjtxState.decodes.filter(d => d.clientId !== msg.id);
+      state.decodes = state.decodes.filter(d => d.clientId !== msg.id);
       break;
     }
     
     case WSJTX_MSG.QSO_LOGGED: {
-      const clientStatus = wsjtxState.clients[msg.id] || {};
+      const clientStatus = state.clients[msg.id] || {};
       const qso = {
         clientId: msg.id,
         dxCall: msg.dxCall,
@@ -4044,9 +4083,9 @@ function handleWSJTXMessage(msg) {
         const coords = gridToLatLon(msg.dxGrid);
         if (coords) { qso.lat = coords.latitude; qso.lon = coords.longitude; }
       }
-      wsjtxState.qsos.push(qso);
+      state.qsos.push(qso);
       // Keep last 50 QSOs
-      if (wsjtxState.qsos.length > 50) wsjtxState.qsos.shift();
+      if (state.qsos.length > 50) state.qsos.shift();
       break;
     }
     
@@ -4065,14 +4104,14 @@ function handleWSJTXMessage(msg) {
         timestamp: msg.timestamp,
       };
       if (msg.isNew) {
-        wsjtxState.wspr.push(wsprDecode);
-        if (wsjtxState.wspr.length > 100) wsjtxState.wspr.shift();
+        state.wspr.push(wsprDecode);
+        if (state.wspr.length > 100) state.wspr.shift();
       }
       break;
     }
     
     case WSJTX_MSG.CLOSE: {
-      delete wsjtxState.clients[msg.id];
+      delete state.clients[msg.id];
       break;
     }
   }
@@ -4106,16 +4145,21 @@ if (WSJTX_ENABLED) {
 
 // API endpoint: get WSJT-X data
 app.get('/api/wsjtx', (req, res) => {
+  const sessionId = req.query.session || '';
+  
+  // Use session-specific state for relay mode, or global state for local UDP
+  const state = (sessionId && WSJTX_RELAY_KEY) ? (wsjtxRelaySessions[sessionId] || { clients: {}, decodes: [], qsos: [], wspr: [], relay: null }) : wsjtxState;
+  
   const clients = {};
-  for (const [id, client] of Object.entries(wsjtxState.clients)) {
+  for (const [id, client] of Object.entries(state.clients)) {
     // Only include clients seen in last 5 minutes
     if (Date.now() - client.lastSeen < 5 * 60 * 1000) {
       clients[id] = client;
     }
   }
   
-  // Relay is "connected" if seen in last 60 seconds
-  const relayConnected = wsjtxState.relay && (Date.now() - wsjtxState.relay.lastSeen < 60000);
+  // Relay is "connected" if this session's relay was seen in last 60 seconds
+  const relayConnected = state.relay && (Date.now() - state.relay.lastSeen < 60000);
   
   res.json({
     enabled: WSJTX_ENABLED,
@@ -4123,13 +4167,13 @@ app.get('/api/wsjtx', (req, res) => {
     relayEnabled: !!WSJTX_RELAY_KEY,
     relayConnected: !!relayConnected,
     clients,
-    decodes: wsjtxState.decodes.slice(-100), // last 100
-    qsos: wsjtxState.qsos.slice(-20), // last 20
-    wspr: wsjtxState.wspr.slice(-50), // last 50
+    decodes: state.decodes.slice(-100), // last 100
+    qsos: state.qsos.slice(-20), // last 20
+    wspr: state.wspr.slice(-50), // last 50
     stats: {
-      totalDecodes: wsjtxState.decodes.length,
-      totalQsos: wsjtxState.qsos.length,
-      totalWspr: wsjtxState.wspr.length,
+      totalDecodes: state.decodes.length,
+      totalQsos: state.qsos.length,
+      totalWspr: state.wspr.length,
       activeClients: Object.keys(clients).length,
     }
   });
@@ -4137,10 +4181,13 @@ app.get('/api/wsjtx', (req, res) => {
 
 // API endpoint: get just decodes (lightweight polling)
 app.get('/api/wsjtx/decodes', (req, res) => {
+  const sessionId = req.query.session || '';
+  const state = (sessionId && WSJTX_RELAY_KEY) ? (wsjtxRelaySessions[sessionId] || { decodes: [] }) : wsjtxState;
+  
   const since = parseInt(req.query.since) || 0;
   const decodes = since 
-    ? wsjtxState.decodes.filter(d => d.timestamp > since)
-    : wsjtxState.decodes.slice(-100);
+    ? state.decodes.filter(d => d.timestamp > since)
+    : state.decodes.slice(-100);
   
   res.json({ decodes, timestamp: Date.now() });
 });
@@ -4160,9 +4207,17 @@ app.post('/api/wsjtx/relay', (req, res) => {
     return res.status(401).json({ error: 'Invalid relay key' });
   }
   
-  // Relay heartbeat — just registers the relay as alive
+  // Session ID is required for relay — isolates data per browser
+  const sessionId = req.body.session || req.headers['x-relay-session'] || '';
+  if (!sessionId) {
+    return res.status(400).json({ error: 'Session ID required' });
+  }
+  
+  const session = getRelaySession(sessionId);
+  
+  // Relay heartbeat — just registers the relay as alive for this session
   if (req.body && req.body.relay === true) {
-    wsjtxState.relay = {
+    session.relay = {
       lastSeen: Date.now(),
       version: req.body.version || '1.0.0',
       port: req.body.port || 2237,
@@ -4177,7 +4232,7 @@ app.post('/api/wsjtx/relay', (req, res) => {
   }
   
   // Update relay last seen on every batch too
-  wsjtxState.relay = { ...(wsjtxState.relay || {}), lastSeen: Date.now() };
+  session.relay = { ...(session.relay || {}), lastSeen: Date.now() };
   
   // Rate limit: max 100 messages per request
   const batch = messages.slice(0, 100);
@@ -4189,7 +4244,7 @@ app.post('/api/wsjtx/relay', (req, res) => {
       if (!msg.timestamp || Math.abs(Date.now() - msg.timestamp) > 5 * 60 * 1000) {
         msg.timestamp = Date.now();
       }
-      handleWSJTXMessage(msg);
+      handleWSJTXMessage(msg, session);
       processed++;
     }
   }
@@ -4230,6 +4285,12 @@ app.get('/api/wsjtx/relay/download/:platform', (req, res) => {
   const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   const serverURL = proto + '://' + host;
+  
+  // Session ID from query param — ties this relay to the downloading browser
+  const sessionId = req.query.session || '';
+  if (!sessionId) {
+    return res.status(400).json({ error: 'Session ID required — download from the OpenHamClock dashboard' });
+  }
   
   if (platform === 'linux' || platform === 'mac') {
     // Build bash script with relay.js embedded as heredoc
@@ -4272,7 +4333,8 @@ app.get('/api/wsjtx/relay/download/:platform', (req, res) => {
       '# Run relay',
       'exec node "$RELAY_FILE" \\',
       '  --url "' + serverURL + '" \\',
-      '  --key "' + WSJTX_RELAY_KEY + '"',
+      '  --key "' + WSJTX_RELAY_KEY + '" \\',
+      '  --session "' + sessionId + '"',
     ];
     
     const script = lines.join('\n') + '\n';
@@ -4371,7 +4433,7 @@ app.get('/api/wsjtx/relay/download/:platform', (req, res) => {
       'echo.',
       '',
       ':: Run relay',
-      '%NODE_EXE% "%TEMP%\\ohc-relay.js" --url "' + serverURL + '" --key "' + WSJTX_RELAY_KEY + '"',
+      '%NODE_EXE% "%TEMP%\\ohc-relay.js" --url "' + serverURL + '" --key "' + WSJTX_RELAY_KEY + '" --session "' + sessionId + '"',
       '',
       'echo.',
       'echo   Relay stopped.',
