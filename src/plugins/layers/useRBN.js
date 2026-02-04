@@ -13,8 +13,192 @@ import { useState, useEffect, useRef } from 'react';
  * - Great circle paths to skimmers
  * 
  * Data source: Reverse Beacon Network API
- * Update interval: 2 minutes
+ * Update interval: 10 seconds
  */
+
+// Make control panel draggable with CTRL+drag and save position
+function makeDraggable(element, storageKey) {
+  if (!element) return;
+  
+  // Load saved position
+  const saved = localStorage.getItem(storageKey);
+  if (saved) {
+    try {
+      const { top, left } = JSON.parse(saved);
+      element.style.position = 'fixed';
+      element.style.top = top + 'px';
+      element.style.left = left + 'px';
+      element.style.right = 'auto';
+      element.style.bottom = 'auto';
+    } catch (e) {}
+  } else {
+    // Convert from Leaflet control position to fixed
+    const rect = element.getBoundingClientRect();
+    element.style.position = 'fixed';
+    element.style.top = rect.top + 'px';
+    element.style.left = rect.left + 'px';
+    element.style.right = 'auto';
+    element.style.bottom = 'auto';
+  }
+  
+  // Add drag hint
+  element.title = 'Hold CTRL and drag to reposition';
+  
+  let isDragging = false;
+  let startX, startY, startLeft, startTop;
+  
+  // Update cursor based on CTRL key
+  const updateCursor = (e) => {
+    if (e.ctrlKey) {
+      element.style.cursor = 'grab';
+    } else {
+      element.style.cursor = 'default';
+    }
+  };
+  
+  element.addEventListener('mouseenter', updateCursor);
+  element.addEventListener('mousemove', updateCursor);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Control') updateCursor(e);
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'Control') updateCursor(e);
+  });
+  
+  element.addEventListener('mousedown', function(e) {
+    // Only allow dragging with CTRL key
+    if (!e.ctrlKey) return;
+    
+    // Only allow dragging from empty areas (not inputs/selects)
+    if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL') {
+      return;
+    }
+    
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startLeft = element.offsetLeft;
+    startTop = element.offsetTop;
+    
+    element.style.cursor = 'grabbing';
+    element.style.opacity = '0.8';
+    e.preventDefault();
+  });
+  
+  document.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    
+    element.style.left = (startLeft + dx) + 'px';
+    element.style.top = (startTop + dy) + 'px';
+  });
+  
+  document.addEventListener('mouseup', function(e) {
+    if (isDragging) {
+      isDragging = false;
+      element.style.opacity = '1';
+      updateCursor(e);
+      
+      // Save position
+      const position = {
+        top: element.offsetTop,
+        left: element.offsetLeft
+      };
+      localStorage.setItem(storageKey, JSON.stringify(position));
+    }
+  });
+}
+
+// Add minimize/maximize functionality to control panels
+function addMinimizeToggle(element, storageKey) {
+  if (!element) return;
+  
+  const minimizeKey = storageKey + '-minimized';
+  
+  // Create minimize button
+  const header = element.querySelector('div:first-child');
+  if (!header) return;
+  
+  // Wrap content (everything except header)
+  const content = Array.from(element.children).slice(1);
+  const contentWrapper = document.createElement('div');
+  contentWrapper.className = 'rbn-panel-content';
+  content.forEach(child => contentWrapper.appendChild(child));
+  element.appendChild(contentWrapper);
+  
+  // Add minimize button to header
+  const minimizeBtn = document.createElement('span');
+  minimizeBtn.className = 'rbn-minimize-btn';
+  minimizeBtn.innerHTML = '▼';
+  minimizeBtn.style.cssText = `
+    float: right;
+    cursor: pointer;
+    user-select: none;
+    padding: 0 4px;
+    margin: -2px -4px 0 0;
+    font-size: 10px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+  `;
+  minimizeBtn.title = 'Minimize/Maximize';
+  
+  minimizeBtn.addEventListener('mouseenter', () => {
+    minimizeBtn.style.opacity = '1';
+  });
+  minimizeBtn.addEventListener('mouseleave', () => {
+    minimizeBtn.style.opacity = '0.7';
+  });
+  
+  header.style.display = 'flex';
+  header.style.justifyContent = 'space-between';
+  header.style.alignItems = 'center';
+  header.appendChild(minimizeBtn);
+  
+  // Load saved state
+  const isMinimized = localStorage.getItem(minimizeKey) === 'true';
+  if (isMinimized) {
+    contentWrapper.style.display = 'none';
+    minimizeBtn.innerHTML = '▶';
+    element.style.cursor = 'pointer';
+  }
+  
+  // Toggle function
+  const toggle = (e) => {
+    // Don't toggle if CTRL is held (for dragging)
+    if (e && e.ctrlKey) return;
+    
+    const isCurrentlyMinimized = contentWrapper.style.display === 'none';
+    
+    if (isCurrentlyMinimized) {
+      // Expand
+      contentWrapper.style.display = 'block';
+      minimizeBtn.innerHTML = '▼';
+      element.style.cursor = 'default';
+      localStorage.setItem(minimizeKey, 'false');
+    } else {
+      // Minimize
+      contentWrapper.style.display = 'none';
+      minimizeBtn.innerHTML = '▶';
+      element.style.cursor = 'pointer';
+      localStorage.setItem(minimizeKey, 'true');
+    }
+  };
+  
+  // Click header to toggle (except on button itself)
+  header.addEventListener('click', (e) => {
+    if (e.target === header || e.target.tagName === 'DIV') {
+      toggle(e);
+    }
+  });
+  
+  // Click button to toggle
+  minimizeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggle(e);
+  });
+}
 
 export const metadata = {
   id: 'rbn',
@@ -533,6 +717,15 @@ export function useLayer({ enabled = false, opacity = 0.7, map = null, callsign 
 
     control.addTo(map);
     controlRef.current = control;
+
+    // Make the control draggable and minimizable
+    setTimeout(() => {
+      const controlElement = control.getContainer();
+      if (controlElement) {
+        makeDraggable(controlElement, 'rbn-panel-position');
+        addMinimizeToggle(controlElement, 'rbn-panel');
+      }
+    }, 150);
 
     return () => {
       if (controlRef.current) {
