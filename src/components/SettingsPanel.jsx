@@ -7,7 +7,7 @@ import { calculateGridSquare } from '../utils/geo.js';
 import { useTranslation, Trans } from 'react-i18next';
 import { LANGUAGES } from '../lang/i18n.js';
 
-export const SettingsPanel = ({ isOpen, onClose, config, onSave }) => {
+export const SettingsPanel = ({ isOpen, onClose, config, onSave, onResetLayout }) => {
   const [callsign, setCallsign] = useState(config?.callsign || '');
   const [headerSize, setheaderSize] = useState(config?.headerSize || 1.0);
   const [gridSquare, setGridSquare] = useState('');
@@ -486,6 +486,34 @@ export const SettingsPanel = ({ isOpen, onClose, config, onSave }) => {
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
                 {layoutDescriptions[layout]}
               </div>
+              {layout === 'dockable' && onResetLayout && (
+                <button
+                  onClick={() => {
+                    if (confirm('Reset panel layout to default?')) {
+                      onResetLayout();
+                    }
+                  }}
+                  style={{
+                    marginTop: '10px',
+                    padding: '8px 12px',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    color: 'var(--text-secondary)',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <path d="M3 3v5h5" />
+                  </svg>
+                  Reset Panel Layout
+                </button>
+              )}
             </div>
 
             {/* DX Cluster Source */}

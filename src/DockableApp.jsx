@@ -18,20 +18,13 @@ import {
   PSKReporterPanel
 } from './components';
 
-import { loadLayout, saveLayout, resetLayout, DEFAULT_LAYOUT } from './store/layoutStore.js';
+import { loadLayout, saveLayout, DEFAULT_LAYOUT } from './store/layoutStore.js';
 import './styles/flexlayout-openhamclock.css';
 
 // Icons
 const PlusIcon = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
     <path d="M12 5v14M5 12h14" />
-  </svg>
-);
-
-const ResetIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-    <path d="M3 3v5h5" />
   </svg>
 );
 
@@ -122,13 +115,6 @@ export const DockableApp = ({
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, []);
-
-  // Reset layout
-  const handleResetLayout = useCallback(() => {
-    if (confirm('Reset panel layout to default?')) {
-      setModel(Model.fromJson(resetLayout()));
-    }
   }, []);
 
   // Panel definitions
@@ -370,21 +356,6 @@ export const DockableApp = ({
           onModelChange={handleModelChange}
           onRenderTabSet={onRenderTabSet}
         />
-
-        {/* Reset button */}
-        <button
-          onClick={handleResetLayout}
-          title="Reset layout"
-          style={{
-            position: 'absolute', bottom: '16px', left: '16px',
-            background: 'rgba(26, 32, 44, 0.9)', border: '1px solid #2d3748',
-            color: '#a0aec0', padding: '6px 10px', borderRadius: '6px',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', zIndex: 1000
-          }}
-        >
-          <ResetIcon /> Reset
-        </button>
       </div>
 
       {/* Panel picker modal */}

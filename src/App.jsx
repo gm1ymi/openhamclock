@@ -23,6 +23,7 @@ import {
 
 // Dockable layout
 import DockableApp from './DockableApp.jsx';
+import { resetLayout } from './store/layoutStore.js';
 
 // Hooks
 import {
@@ -104,6 +105,7 @@ const App = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showDXFilters, setShowDXFilters] = useState(false);
   const [showPSKFilters, setShowPSKFilters] = useState(false);
+  const [layoutResetKey, setLayoutResetKey] = useState(0);
   const [weatherExpanded, setWeatherExpanded] = useState(() => {
     try { return localStorage.getItem('openhamclock_weatherExpanded') === 'true'; } catch { return false; }
   });
@@ -150,6 +152,12 @@ const App = () => {
   }, [use12Hour]);
   
   const handleTimeFormatToggle = useCallback(() => setUse12Hour(prev => !prev), []);
+
+  // Reset dockable layout
+  const handleResetLayout = useCallback(() => {
+    resetLayout();
+    setLayoutResetKey(prev => prev + 1);
+  }, []);
 
   // Fullscreen
   const handleFullscreenToggle = useCallback(() => {
@@ -338,6 +346,7 @@ const App = () => {
       {config.layout === 'dockable' ? (
         /* DOCKABLE PANEL LAYOUT */
         <DockableApp
+          key={layoutResetKey}
           config={config}
           currentTime={currentTime}
           deGrid={deGrid}
@@ -1558,11 +1567,12 @@ const App = () => {
       )}
       
       {/* Modals */}
-      <SettingsPanel 
-        isOpen={showSettings} 
-        onClose={() => setShowSettings(false)} 
+      <SettingsPanel
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
         config={config}
         onSave={handleSaveConfig}
+        onResetLayout={handleResetLayout}
       />
       <DXFilterManager
         filters={dxFilters}
