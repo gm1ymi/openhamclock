@@ -2266,6 +2266,8 @@ function fetchRBNSpotsRealtime(userCallsign, collectSeconds = 10, port = 7000) {
     const spots = [];
     let dataBuffer = '';
     let authenticated = false;
+    let collectionStarted = false;
+    let collectionTimer = null;
     
     console.log(`[RBN] Creating connection to telnet.reversebeacon.net:${port}...`);
     
@@ -2276,7 +2278,8 @@ function fetchRBNSpotsRealtime(userCallsign, collectSeconds = 10, port = 7000) {
       console.log(`[RBN] Connected successfully, waiting for prompt...`);
     });
 
-    client.setTimeout(collectSeconds * 1000 + 5000); // Collection time + 5s buffer
+    // Don't use timeout - we'll manually close after collecting
+    
     client.setEncoding('utf8'); // Ensure proper encoding
     
     client.on('data', (data) => {
@@ -2294,9 +2297,19 @@ function fetchRBNSpotsRealtime(userCallsign, collectSeconds = 10, port = 7000) {
         // Handle authentication prompt
         if (line.includes('Please enter your call:') && !authenticated) {
           console.log(`[RBN] Sending callsign: ${userCallsign}`);
-          client.write(`${userCallsign}\n`);
+          client.write(`${userCallsign}\r\n`);
           authenticated = true;
           continue;
+        }
+        
+        // Start collection timer after authentication is complete
+        if (authenticated && !collectionStarted && line.includes('Connected')) {
+          collectionStarted = true;
+          console.log(`[RBN] Authentication complete, collecting spots for ${collectSeconds}s...`);
+          collectionTimer = setTimeout(() => {
+            console.log(`[RBN] Collection time complete`);
+            client.destroy();
+          }, collectSeconds * 1000);
         }
         
         // Parse RBN spot line format:
@@ -2331,18 +2344,14 @@ function fetchRBNSpotsRealtime(userCallsign, collectSeconds = 10, port = 7000) {
       }
     });
 
-    client.on('timeout', () => {
-      console.log(`[RBN] Collection complete: ${spots.length} spots`);
-      client.destroy();
-      resolve(spots);
-    });
-
     client.on('error', (err) => {
       console.error(`[RBN] Connection error: ${err.message}`);
+      if (collectionTimer) clearTimeout(collectionTimer);
       reject(err);
     });
 
     client.on('close', () => {
+      if (collectionTimer) clearTimeout(collectionTimer);
       console.log(`[RBN] Connection closed, collected ${spots.length} spots`);
       resolve(spots);
     });
