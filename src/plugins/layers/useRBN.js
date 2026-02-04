@@ -136,7 +136,7 @@ function freqToBand(freq) {
 
 export function useLayer({ enabled = false, opacity = 0.7, map = null, callsign }) {
   const [spots, setSpots] = useState([]);
-  const [selectedBand, setSelectedBand] = useState('All');
+  const [selectedBand, setSelectedBand] = useState('all');
   const [timeWindow, setTimeWindow] = useState(30); // minutes
   const [minSNR, setMinSNR] = useState(-10);
   const [showPaths, setShowPaths] = useState(true);
@@ -190,10 +190,12 @@ export function useLayer({ enabled = false, opacity = 0.7, map = null, callsign 
             try {
               // Check if we already have grid in the spot
               if (!spot.grid) {
+                console.log(`[RBN] Looking up location for ${spot.callsign}...`);
                 // Lookup skimmer location (cached on server)
                 const locationResponse = await fetch(`/api/rbn/location/${spot.callsign}`);
                 if (locationResponse.ok) {
                   const locationData = await locationResponse.json();
+                  console.log(`[RBN] Got location for ${spot.callsign}: ${locationData.grid}`);
                   return {
                     ...spot,
                     grid: locationData.grid,
@@ -201,6 +203,8 @@ export function useLayer({ enabled = false, opacity = 0.7, map = null, callsign 
                     skimmerLon: locationData.lon,
                     skimmerCountry: locationData.country
                   };
+                } else {
+                  console.warn(`[RBN] Location lookup failed for ${spot.callsign}: ${locationResponse.status}`);
                 }
               }
             } catch (err) {
@@ -209,6 +213,8 @@ export function useLayer({ enabled = false, opacity = 0.7, map = null, callsign 
             return spot;
           })
         );
+        
+        console.log(`[RBN] Spots with locations:`, spotsWithLocations.filter(s => s.grid).length, 'out of', spotsWithLocations.length);
         
         setSpots(spotsWithLocations);
         
