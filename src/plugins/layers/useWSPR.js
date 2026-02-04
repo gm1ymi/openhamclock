@@ -592,6 +592,11 @@ export function useLayer({ enabled = false, opacity = 0.7, map = null }) {
           <div>Total: <span style="color: #00ff00;">0</span></div>
           <div style="margin-top: 6px; font-size: 10px; opacity: 0.7;">Initializing...</div>
         `;
+        
+        // Prevent map interaction when clicking/dragging on this control
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+        
         return div;
       }
     });
@@ -692,6 +697,11 @@ export function useLayer({ enabled = false, opacity = 0.7, map = null }) {
           max-width: 200px;
         `;
         div.innerHTML = '<div style="font-weight: bold; margin-bottom: 6px; font-size: 11px;">📊 Band Activity</div><div style="opacity: 0.7;">Loading...</div>';
+        
+        // Prevent map interaction when clicking/dragging on this control
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+        
         return div;
       }
     });
