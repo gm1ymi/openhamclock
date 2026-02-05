@@ -4,7 +4,6 @@
  */
 import React from 'react';
 import { IconGear, IconExpand, IconShrink } from './Icons.jsx';
-import LightningWidget from './LightningWidget.jsx';
 export const Header = ({
   config,
   utcTime,
@@ -128,12 +127,6 @@ export const Header = ({
           <span style={{ color: 'var(--accent-cyan)', fontWeight: '700' }}>{solarIndices?.data?.ssn?.current || spaceWeather?.data?.sunspotNumber || '--'}</span>
         </div>
       </div>
-
-      {/* Lightning Widget */}
-      <LightningWidget 
-        stationLat={config?.latitude}
-        stationLon={config?.longitude}
-      />
 
       {/* Settings & Fullscreen Buttons */}
       <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>

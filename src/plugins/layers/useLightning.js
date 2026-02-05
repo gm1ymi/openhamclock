@@ -236,9 +236,10 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
   const [strikeMarkers, setStrikeMarkers] = useState([]);
   const [lightningData, setLightningData] = useState([]);
   const [statsControl, setStatsControl] = useState(null);
+  const [proximityControl, setProximityControl] = useState(null);
   const [wsKey, setWsKey] = useState(null);
   const [thunderCircles, setThunderCircles] = useState([]);
-  const wsRef = useRef(null);
+  const wsRefs = useRef([]); // Multiple WebSocket connections
   const reconnectTimerRef = useRef(null);
   const strikesBufferRef = useRef([]);
   const previousStrikeIds = useRef(new Set());
@@ -763,9 +764,163 @@ export function useLayer({ enabled = false, opacity = 0.9, map = null }) {
     }
   }, [enabled, lightningData]);
 
-  // Return lightning data for external components (like widget)
-  return {
-    data: lightningData,
-    enabled: enabled
-  };
+  // Create proximity panel control (30km radius)
+  useEffect(() => {
+    if (!map || typeof L === 'undefined' || !enabled || !window.hamclockConfig) return;
+    if (proximityControl) return; // Already created
+    
+    const config = window.hamclockConfig;
+    const stationLat = config.latitude;
+    const stationLon = config.longitude;
+    
+    if (!stationLat || !stationLon) return;
+
+    console.log('[Lightning] Creating proximity panel control...');
+
+    const ProximityControl = L.Control.extend({
+      options: { position: 'bottomright' },
+      onAdd: function() {
+        const div = L.DomUtil.create('div', 'lightning-proximity');
+        div.style.cssText = `
+          background: var(--bg-panel);
+          padding: 10px;
+          border-radius: 8px;
+          border: 1px solid var(--border-color);
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          color: var(--text-primary);
+          min-width: 200px;
+          max-width: 280px;
+        `;
+        div.innerHTML = `
+          <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px;">📍 Nearby Strikes (30km)</div>
+          <div style="opacity: 0.7; font-size: 10px;">No recent strikes</div>
+        `;
+        
+        // Prevent map interaction
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+        
+        return div;
+      }
+    });
+
+    const control = new ProximityControl();
+    map.addControl(control);
+    setProximityControl(control);
+
+    // Make draggable and add minimize toggle
+    setTimeout(() => {
+      const container = document.querySelector('.lightning-proximity');
+      if (container) {
+        const saved = localStorage.getItem('lightning-proximity-position');
+        if (saved) {
+          try {
+            const { top, left } = JSON.parse(saved);
+            container.style.position = 'fixed';
+            container.style.top = top + 'px';
+            container.style.left = left + 'px';
+            container.style.right = 'auto';
+            container.style.bottom = 'auto';
+          } catch (e) {}
+        }
+        
+        makeDraggable(container, 'lightning-proximity-position');
+        addMinimizeToggle(container, 'lightning-proximity-position');
+      }
+    }, 150);
+
+    return () => {
+      if (control && map) {
+        try {
+          map.removeControl(control);
+        } catch (e) {}
+      }
+    };
+  }, [map, enabled, proximityControl]);
+
+  // Update proximity panel content
+  useEffect(() => {
+    if (!proximityControl || !window.hamclockConfig) return;
+
+    const div = document.querySelector('.lightning-proximity');
+    if (!div) return;
+
+    if (!enabled || lightningData.length === 0) return;
+
+    const config = window.hamclockConfig;
+    const stationLat = config.latitude;
+    const stationLon = config.longitude;
+    
+    if (!stationLat || !stationLon) return;
+
+    const PROXIMITY_RADIUS_KM = 30;
+    const now = Date.now();
+
+    // Find all strikes within 30km
+    const nearbyStrikes = lightningData
+      .map(strike => {
+        const distance = calculateDistance(stationLat, stationLon, strike.lat, strike.lon, 'km');
+        return { ...strike, distance };
+      })
+      .filter(strike => strike.distance <= PROXIMITY_RADIUS_KM)
+      .sort((a, b) => a.distance - b.distance); // Sort by distance (closest first)
+
+    let contentHTML = '';
+    
+    if (nearbyStrikes.length === 0) {
+      contentHTML = `
+        <div style="opacity: 0.7; font-size: 10px; text-align: center; padding: 10px 0;">
+          ✅ No strikes within 30km<br>
+          <span style="font-size: 9px; color: var(--text-muted);">All clear</span>
+        </div>
+      `;
+    } else {
+      const closestStrike = nearbyStrikes[0];
+      const ageMinutes = Math.floor((now - closestStrike.timestamp) / 60000);
+      const ageSeconds = Math.floor((now - closestStrike.timestamp) / 1000);
+      const ageStr = ageMinutes > 0 ? `${ageMinutes}m ago` : `${ageSeconds}s ago`;
+      
+      contentHTML = `
+        <div style="margin-bottom: 8px; padding: 8px; background: rgba(255,0,0,0.1); border-left: 3px solid var(--accent-red); border-radius: 4px;">
+          <div style="font-weight: bold; color: var(--accent-red); margin-bottom: 4px;">
+            ⚡ ${nearbyStrikes.length} strike${nearbyStrikes.length > 1 ? 's' : ''} detected
+          </div>
+          <div style="font-size: 10px;">
+            <strong>Closest:</strong> ${closestStrike.distance.toFixed(1)} km<br>
+            <strong>Time:</strong> ${ageStr}<br>
+            <strong>Polarity:</strong> ${closestStrike.polarity === 'positive' ? '+' : '-'} ${Math.round(closestStrike.intensity)} kA
+          </div>
+        </div>
+        <div style="font-size: 9px; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 6px; margin-top: 6px;">
+          <strong>All Nearby Strikes:</strong><br>
+          <div style="max-height: 150px; overflow-y: auto; margin-top: 4px;">
+            ${nearbyStrikes.slice(0, 10).map((strike, idx) => {
+              const age = Math.floor((now - strike.timestamp) / 1000);
+              const timeStr = age < 60 ? `${age}s` : `${Math.floor(age / 60)}m`;
+              return `
+                <div style="padding: 2px 0; border-bottom: 1px dotted var(--border-color);">
+                  ${idx + 1}. ${strike.distance.toFixed(1)} km • ${timeStr} • ${strike.polarity === 'positive' ? '+' : '-'}${Math.round(strike.intensity)} kA
+                </div>
+              `;
+            }).join('')}
+            ${nearbyStrikes.length > 10 ? `<div style="padding: 4px 0; opacity: 0.6;">+${nearbyStrikes.length - 10} more...</div>` : ''}
+          </div>
+        </div>
+      `;
+    }
+    
+    const contentWrapper = div.querySelector('.lightning-panel-content');
+    if (contentWrapper) {
+      contentWrapper.innerHTML = contentHTML;
+    } else {
+      const children = Array.from(div.children);
+      children.slice(1).forEach(child => child.remove());
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = contentHTML;
+      Array.from(tempDiv.children).forEach(child => div.appendChild(child));
+    }
+  }, [proximityControl, enabled, lightningData]);
+
+  return null; // Plugin-only - no data export
 }
