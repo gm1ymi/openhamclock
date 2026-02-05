@@ -144,6 +144,7 @@ const CONFIG = {
   showPota: process.env.SHOW_POTA !== 'false' && jsonConfig.features?.showPOTA !== false,
   showDxPaths: process.env.SHOW_DX_PATHS !== 'false' && jsonConfig.features?.showDXPaths !== false,
   showDxWeather: process.env.SHOW_DX_WEATHER !== 'false' && jsonConfig.features?.showDXWeather !== false,
+  classicAnalogClock: process.env.CLASSIC_ANALOG_CLOCK === 'true' || jsonConfig.features?.classicAnalogClock === true,
   showContests: jsonConfig.features?.showContests !== false,
   showDXpeditions: jsonConfig.features?.showDXpeditions !== false,
   

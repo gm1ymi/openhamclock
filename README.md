@@ -589,6 +589,7 @@ All configuration is done through the `.env` file. On first run, this file is au
 | `SHOW_SATELLITES` | `true` | Show satellite tracks on the map. |
 | `SHOW_DX_PATHS` | `true` | Show great-circle DX signal paths on the map. |
 | `SHOW_DX_WEATHER` | `true` | Show weather for the selected DX location. |
+| `CLASSIC_ANALOG_CLOCK` | `false` | Show analog clock panel in the classic layout. Always available in dockable layout. |
 
 ### External Services
 
