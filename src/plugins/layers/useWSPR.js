@@ -38,9 +38,9 @@ export const metadata = {
   description: 'plugins.layers.wspr.description',
   icon: '📡',
   category: 'propagation',
-  defaultEnabled: false,
+  defaultEnabled: false, // Opt-in only - uses PSKReporter HTTP API
   defaultOpacity: 0.7,
-  version: '1.6.0'
+  version: '1.6.1'
 };
 
 // Convert grid square to lat/lon
@@ -539,7 +539,7 @@ export function useLayer({ enabled = false, opacity = 0.7, map = null, callsign,
     };
 
     fetchWSPR();
-    const interval = setInterval(fetchWSPR, 60000); // Poll every 60 seconds
+    const interval = setInterval(fetchWSPR, 300000); // Poll every 5 minutes - be kind to PSKReporter
 
     return () => clearInterval(interval);
   }, [enabled, bandFilter, timeWindow, callsign, filterByGrid]);

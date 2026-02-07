@@ -3554,7 +3554,7 @@ app.get('/api/rbn', async (req, res) => {
 // WSPR heatmap endpoint - gets global propagation data
 // Uses PSK Reporter to fetch WSPR mode spots from the last N minutes
 let wsprCache = { data: null, timestamp: 0 };
-const WSPR_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+const WSPR_CACHE_TTL = 10 * 60 * 1000; // 10 minutes cache - be kind to PSKReporter
 
 // Aggregate WSPR spots by 4-character grid square for bandwidth efficiency
 // Reduces payload from ~2MB to ~50KB while preserving heatmap visualization
